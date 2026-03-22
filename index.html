@@ -170,6 +170,10 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
     <div class="tool-swatch" style="background:#1a2a1a;display:flex;align-items:center;justify-content:center;font-size:12px;">🚩</div>
     스폰 포인트
   </div>
+  <div class="tool-btn" data-tool="enemy">
+    <div class="tool-swatch" style="background:#2a1a2a;display:flex;align-items:center;justify-content:center;font-size:12px;">👾</div>
+    적 (순찰)
+  </div>
   <div class="tool-btn" data-tool="erase">
     <div class="tool-swatch" style="background:#2a1a1a;display:flex;align-items:center;justify-content:center;font-size:12px;">✕</div>
     지우개
@@ -254,6 +258,9 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
       <kbd>← →</kbd> 이동<br>
       <kbd>Space</kbd> 점프<br>
       <kbd>Z</kbd> / <kbd>Shift</kbd> 대시<br>
+      <kbd>X</kbd> 공격 (방향 조합!)<br>
+      <kbd>↓+X</kbd> 아래베기 (포고!)<br>
+      <kbd>↑+X</kbd> 위베기<br>
       <kbd>↑↓</kbd> 길게: 카메라<br>
     </div>
     <div style="margin-top:8px;">
@@ -348,6 +355,8 @@ function createDefaultLevel() {
     { id: nextId++, type: 'platform', x: -320, y: 448, w: 64, h: 32 },
     { id: nextId++, type: 'platform', x: -240, y: 464, w: 48, h: 48 },
     { id: nextId++, type: 'platform', x: -384, y: 352, w: 32, h: 32 },
+    { id: nextId++, type: 'enemy', x: 400, y: 490, w: 24, h: 28 },
+    { id: nextId++, type: 'enemy', x: 1400, y: 250, w: 24, h: 28 },
   ];
   spawnPoint = { x: 100, y: 450 };
 }
@@ -397,6 +406,9 @@ const P = {
   dashSpd: 500, dashDur: 210, dashCd: 600, dashIframe: 210, dashGrav: 0,
   wallSlideSpd: 72, wallJumpX: 200, wallJumpY: 540, wallJumpLock: 170,
   camSpdX: 4.5, camSpdY: 3.5, camDeadX: 30, camDeadY: 15, camOffY: 40,
+  // Combat
+  atkDur: 150, atkCd: 300, atkRange: 36, atkWidth: 28, atkDmg: 1,
+  atkKnockback: 200, pogoForce: 400, hitstopDur: 60,
 };
 
 // === Init UI Params ===
@@ -446,11 +458,11 @@ window.addEventListener('keydown', e => {
   // Number keys for tools
   if (editorMode) {
     const toolMap = { 'Digit1': 'select', 'Digit2': 'platform', 'Digit3': 'wall',
-      'Digit4': 'ground', 'Digit5': 'oneway', 'Digit6': 'hazard', 'Digit7': 'spawn' };
+      'Digit4': 'ground', 'Digit5': 'oneway', 'Digit6': 'hazard', 'Digit7': 'spawn', 'Digit8': 'enemy' };
     if (toolMap[e.code]) selectTool(toolMap[e.code]);
   }
 
-  if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => {
   if (e.target.tagName === 'INPUT') return;
@@ -530,6 +542,9 @@ const player = {
   state: '대기', prevVy: 0,
   walkCycle: 0, squash: 1, stretch: 1,
   eyeBlink: 0, blinkTimer: 2,
+  // Combat
+  attacking: false, atkTimer: 0, atkDir: 'right', atkCdTimer: 0,
+  atkCombo: 0, hitstopTimer: 0,
 };
 
 function resetPlayer() {
@@ -540,14 +555,32 @@ function resetPlayer() {
   player.wallSliding = false; player.wallJumpLockTimer = 0;
   player.hurtInvincTimer = 0; player.hurtKnockTimer = 0;
   player.canDashInAir = true;
+  player.attacking = false; player.atkTimer = 0; player.atkCdTimer = 0;
+  // Reset enemies
+  rebuildColliders();
 }
 
 // === Collider cache ===
 let platforms = [];
 let hazardsList = [];
+let enemies = [];
 function rebuildColliders() {
-  platforms = levelObjects.filter(o => o.type !== 'hazard');
+  platforms = levelObjects.filter(o => o.type !== 'hazard' && o.type !== 'enemy');
   hazardsList = levelObjects.filter(o => o.type === 'hazard');
+  // Spawn enemies from level data
+  const enemyObjs = levelObjects.filter(o => o.type === 'enemy');
+  enemies = enemyObjs.map(o => ({
+    srcId: o.id,
+    x: o.x, y: o.y, w: o.w || 24, h: o.h || 28,
+    vx: 0, vy: 0,
+    hp: 3, maxHp: 3,
+    patrolDir: 1, patrolRange: 120,
+    originX: o.x,
+    hurtTimer: 0, dead: false,
+    facingRight: true,
+    squash: 1, stretch: 1,
+    walkCycle: 0,
+  }));
   document.getElementById('obj-count').textContent = `오브젝트: ${levelObjects.length}`;
 }
 rebuildColliders();
@@ -709,7 +742,7 @@ function handleMouseUp(e) {
     let h = y2 - y1;
 
     // Min size
-    const minSizes = { platform: [32, 16], wall: [16, 32], ground: [64, 32], hazard: [16, 8], oneway: [32, 8] };
+    const minSizes = { platform: [32, 16], wall: [16, 32], ground: [64, 32], hazard: [16, 8], oneway: [32, 8], enemy: [24, 24] };
     const mins = minSizes[dragState.tool] || [16, 16];
     if (w < mins[0]) w = mins[0];
     if (h < mins[1]) h = mins[1];
@@ -1010,6 +1043,19 @@ function resolveCollisions() {
 let gameTime = 0;
 function updatePlayer(dt) {
   if (dt > 0.05) dt = 0.05;
+
+  // Hitstop — freeze game except timer
+  if (player.hitstopTimer > 0) {
+    player.hitstopTimer -= dt * 1000;
+    player.atkTimer = Math.max(0, player.atkTimer - dt * 1000);
+    if (player.atkTimer <= 0) player.attacking = false;
+    // Still allow new attack input during hitstop
+    if (justPressed['KeyX'] && player.atkCdTimer <= 0 && !player.dashing) {
+      // will be handled after hitstop ends
+    }
+    return;
+  }
+
   gameTime += dt;
 
   const inL = keys['ArrowLeft'] || keys['KeyA'];
@@ -1144,6 +1190,80 @@ function updatePlayer(dt) {
   }
   if (player.y > 900) resetPlayer();
 
+  // === Combat ===
+  player.atkCdTimer = Math.max(0, player.atkCdTimer - dt * 1000);
+  player.atkTimer = Math.max(0, player.atkTimer - dt * 1000);
+  player.hitstopTimer = Math.max(0, player.hitstopTimer - dt * 1000);
+  if (player.atkTimer <= 0) player.attacking = false;
+
+  // Attack input
+  if (justPressed['KeyX'] && player.atkCdTimer <= 0 && !player.dashing) {
+    player.attacking = true;
+    player.atkTimer = P.atkDur;
+    player.atkCdTimer = P.atkCd;
+    // Direction
+    const inUp = keys['ArrowUp'] || keys['KeyW'];
+    const inDown = (keys['ArrowDown'] || keys['KeyS']) && !player.onGround;
+    if (inUp) player.atkDir = 'up';
+    else if (inDown) player.atkDir = 'down';
+    else player.atkDir = player.facingRight ? 'right' : 'left';
+    cam.shake = 1;
+
+    // Attack hitbox
+    let atkBox;
+    const cx = player.x + player.w / 2;
+    const cy = player.y + player.h / 2;
+    if (player.atkDir === 'right') atkBox = { x: player.x + player.w, y: cy - P.atkWidth/2, w: P.atkRange, h: P.atkWidth };
+    else if (player.atkDir === 'left') atkBox = { x: player.x - P.atkRange, y: cy - P.atkWidth/2, w: P.atkRange, h: P.atkWidth };
+    else if (player.atkDir === 'up') atkBox = { x: cx - P.atkWidth/2, y: player.y - P.atkRange, w: P.atkWidth, h: P.atkRange };
+    else atkBox = { x: cx - P.atkWidth/2, y: player.y + player.h, w: P.atkWidth, h: P.atkRange };
+
+    // Slash effect particles
+    const slashColors = ['#fff', '#aaccff', '#88aaee'];
+    if (player.atkDir === 'right' || player.atkDir === 'left') {
+      const dir = player.atkDir === 'right' ? 1 : -1;
+      emit(cx + dir * 20, cy, 6, slashColors[Math.floor(Math.random()*3)], [dir*40, dir*120], [-40, 40], 0.12, [1, 3]);
+    } else {
+      const dir = player.atkDir === 'up' ? -1 : 1;
+      emit(cx, cy + dir * 20, 6, slashColors[Math.floor(Math.random()*3)], [-40, 40], [dir*40, dir*120], 0.12, [1, 3]);
+    }
+
+    // Hit enemies
+    let hitAny = false;
+    for (const e of enemies) {
+      if (e.dead || e.hurtTimer > 0) continue;
+      const eb = { x: e.x, y: e.y, w: e.w, h: e.h };
+      if (rectOverlap(atkBox, eb)) {
+        e.hp -= P.atkDmg;
+        e.hurtTimer = 300;
+        hitAny = true;
+        // Knockback enemy
+        const kdir = player.atkDir === 'left' ? -1 : player.atkDir === 'right' ? 1 : (e.x + e.w/2 > cx ? 1 : -1);
+        e.vx = kdir * P.atkKnockback;
+        e.vy = -80;
+        e.squash = 1.3; e.stretch = 0.7;
+        // Hit particles
+        emit(e.x + e.w/2, e.y + e.h/2, 8, '#fff', [-60,60], [-60,20], 0.2, [1,3]);
+        cam.shake = 3;
+        if (e.hp <= 0) {
+          e.dead = true;
+          emit(e.x + e.w/2, e.y + e.h/2, 15, '#f84', [-80,80], [-80,20], 0.4, [2,5]);
+          emit(e.x + e.w/2, e.y + e.h/2, 10, '#fff', [-60,60], [-60,10], 0.3, [1,3]);
+        }
+      }
+    }
+
+    // Pogo bounce (down attack hit → bounce up)
+    if (hitAny && player.atkDir === 'down') {
+      player.vy = -P.pogoForce;
+      player.canDashInAir = true;
+    }
+    // Hitstop
+    if (hitAny) {
+      player.hitstopTimer = P.hitstopDur;
+    }
+  }
+
   // State
   if (player.wallSliding) player.state = '벽타기';
   else if (player.wallJumpLockTimer > 0) player.state = '벽점프';
@@ -1151,6 +1271,70 @@ function updatePlayer(dt) {
   else if (!player.onGround) player.state = '낙하';
   else if (Math.abs(player.vx) > 10) player.state = '이동';
   else player.state = '대기';
+
+  // === Update Enemies ===
+  for (const e of enemies) {
+    if (e.dead) continue;
+    e.hurtTimer = Math.max(0, e.hurtTimer - dt * 1000);
+    e.squash += (1 - e.squash) * Math.min(1, dt * 10);
+    e.stretch += (1 - e.stretch) * Math.min(1, dt * 10);
+
+    // Gravity
+    e.vy += P.gravity * dt;
+    if (e.vy > P.maxFall) e.vy = P.maxFall;
+
+    // Patrol AI (simple)
+    if (e.hurtTimer <= 0) {
+      e.vx = e.patrolDir * 60;
+      e.facingRight = e.patrolDir > 0;
+      if (e.x > e.originX + e.patrolRange) e.patrolDir = -1;
+      if (e.x < e.originX - e.patrolRange) e.patrolDir = 1;
+      e.walkCycle += Math.abs(e.vx) * dt * 0.05;
+    } else {
+      e.vx *= 0.9;
+    }
+
+    e.x += e.vx * dt;
+    e.y += e.vy * dt;
+
+    // Collide with platforms
+    const eb = { x: e.x, y: e.y, w: e.w, h: e.h };
+    for (const p of platforms) {
+      if (!rectOverlap(eb, p)) continue;
+      if (p.type === 'oneway') {
+        const oT = (eb.y + eb.h) - p.y;
+        if (e.vy >= 0 && oT < 12) { e.y = p.y - e.h; e.vy = 0; }
+        continue;
+      }
+      const oL = (eb.x + eb.w) - p.x, oR = (p.x + p.w) - eb.x;
+      const oT = (eb.y + eb.h) - p.y, oB = (p.y + p.h) - eb.y;
+      const min = Math.min(oL, oR, oT, oB);
+      if (min === oT && e.vy >= 0) { e.y = p.y - e.h; e.vy = 0; }
+      else if (min === oB && e.vy <= 0) { e.y = p.y + p.h; e.vy = 0; }
+      else if (min === oL) { e.x = p.x - e.w; e.patrolDir = -1; }
+      else if (min === oR) { e.x = p.x + p.w; e.patrolDir = 1; }
+      eb.x = e.x; eb.y = e.y;
+    }
+
+    // Damage player on contact
+    if (!player.invincible && player.hurtInvincTimer <= 0 && e.hurtTimer <= 0) {
+      const pb = { x: player.x, y: player.y, w: player.w, h: player.h };
+      if (rectOverlap(pb, eb)) {
+        player.hp--;
+        player.hurtInvincTimer = 1000;
+        player.hurtKnockTimer = 200;
+        const dir = player.x + player.w/2 < e.x + e.w/2 ? -1 : 1;
+        player.vx = dir * 150; player.vy = -180;
+        cam.shake = 3;
+        player.squash = 1.3; player.stretch = 0.7;
+        emit(player.x + player.w/2, player.y + player.h/2, 10, '#f55', [-60,60], [-60,20], 0.3);
+        if (player.hp <= 0) resetPlayer();
+      }
+    }
+
+    // Fall off screen
+    if (e.y > 900) e.dead = true;
+  }
 
   // Particles / ghosts
   for (let i = particles.length - 1; i >= 0; i--) {
@@ -1252,6 +1436,7 @@ function draw() {
     wall: ['#1e1e30', '#2a2a44'],
     hazard: ['#3a1a1a', '#5a2a2a'],
     oneway: ['#1a2a1a', '#3a5a3a'],
+    enemy: ['#2a1020', '#4a2040'],
   };
   for (const o of levelObjects) {
     const colors = typeColors[o.type] || ['#222', '#444'];
@@ -1318,6 +1503,115 @@ function draw() {
     ctx.fillStyle = '#e0b040';
     ctx.font = `${10/zoom}px monospace`;
     ctx.fillText(`${w}×${h}`, x1, y1 - 4/zoom);
+  }
+
+  // === Enemies ===
+  if (!editorMode) {
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const ecx = e.x + e.w / 2;
+      ctx.save();
+      ctx.translate(ecx, e.y + e.h);
+      ctx.scale(e.squash, e.stretch);
+      ctx.translate(-ecx, -(e.y + e.h));
+
+      if (e.hurtTimer > 0 && Math.floor(gameTime * 20) % 2 === 0) ctx.globalAlpha = 0.4;
+
+      // Body
+      ctx.fillStyle = '#5a2040';
+      ctx.beginPath();
+      ctx.ellipse(ecx, e.y + e.h * 0.6, e.w * 0.45, e.h * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Head
+      ctx.fillStyle = '#7a3050';
+      ctx.beginPath();
+      ctx.arc(ecx, e.y + 8, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyes (angry)
+      const eyeDir = e.facingRight ? 2 : -2;
+      ctx.fillStyle = '#ff4444';
+      ctx.beginPath(); ctx.arc(ecx - 3 + eyeDir, e.y + 7, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ecx + 3 + eyeDir, e.y + 7, 2.5, 0, Math.PI * 2); ctx.fill();
+      // Pupils
+      ctx.fillStyle = '#220808';
+      ctx.beginPath(); ctx.arc(ecx - 3 + eyeDir, e.y + 7, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ecx + 3 + eyeDir, e.y + 7, 1, 0, Math.PI * 2); ctx.fill();
+
+      // Legs
+      ctx.fillStyle = '#3a1020';
+      const legBob = Math.sin(e.walkCycle) * 3;
+      ctx.fillRect(ecx - 5 + legBob, e.y + e.h - 6, 3, 6);
+      ctx.fillRect(ecx + 2 - legBob, e.y + e.h - 6, 3, 6);
+
+      ctx.restore();
+      ctx.globalAlpha = 1;
+
+      // HP bar
+      if (e.hp < e.maxHp) {
+        const barW = 30, barH = 3;
+        const bx = ecx - barW / 2, by = e.y - 8;
+        ctx.fillStyle = '#333'; ctx.fillRect(bx, by, barW, barH);
+        ctx.fillStyle = '#f44'; ctx.fillRect(bx, by, barW * (e.hp / e.maxHp), barH);
+      }
+    }
+  }
+
+  // === Editor enemy preview ===
+  if (editorMode) {
+    for (const o of levelObjects.filter(ob => ob.type === 'enemy')) {
+      ctx.fillStyle = 'rgba(120,40,80,0.5)';
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.fillStyle = '#f88';
+      ctx.font = `${10/zoom}px sans-serif`;
+      ctx.fillText('👾', o.x + 4, o.y + o.h - 4);
+      // Patrol range
+      ctx.strokeStyle = 'rgba(255,100,100,0.2)';
+      ctx.lineWidth = 1/zoom;
+      ctx.setLineDash([4/zoom, 4/zoom]);
+      ctx.strokeRect(o.x - 120, o.y, o.w + 240, o.h);
+      ctx.setLineDash([]);
+
+      if (selectedObj && selectedObj.id === o.id) {
+        ctx.strokeStyle = '#e0b040';
+        ctx.lineWidth = 2 / zoom;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(o.x - 2, o.y - 2, o.w + 4, o.h + 4);
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
+  // === Attack slash visual ===
+  if (!editorMode && player.attacking) {
+    const cx = player.x + player.w / 2;
+    const cy = player.y + player.h / 2;
+    const progress = 1 - (player.atkTimer / P.atkDur);
+    const alpha = 0.8 * (1 - progress);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3 * (1 - progress);
+
+    if (player.atkDir === 'right') {
+      ctx.beginPath();
+      ctx.arc(cx + 12, cy, P.atkRange, -0.8 + progress, 0.8 - progress * 0.5);
+      ctx.stroke();
+    } else if (player.atkDir === 'left') {
+      ctx.beginPath();
+      ctx.arc(cx - 12, cy, P.atkRange, Math.PI - 0.8 + progress, Math.PI + 0.8 - progress * 0.5);
+      ctx.stroke();
+    } else if (player.atkDir === 'up') {
+      ctx.beginPath();
+      ctx.arc(cx, cy - 8, P.atkRange, -Math.PI/2 - 0.8 + progress, -Math.PI/2 + 0.8 - progress * 0.5);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(cx, cy + player.h/2, P.atkRange, Math.PI/2 - 0.8 + progress, Math.PI/2 + 0.8 - progress * 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // === Spawn point ===
