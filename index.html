@@ -2095,13 +2095,13 @@ function updatePlayer(dt) {
       // 쉘터 안: 회복
       sanityDelta = P.sanityRecoverShelter * dt;
     } else {
+      let isUnderStress = false; // 스트레스 상황 여부
+
       // 밤 야외: 감소
       if (timeOfDay === 'night') {
         sanityDelta -= P.sanityDecayNight * dt;
+        isUnderStress = true;
       }
-      // 인벤토리 아이템 집착 패널티
-      const itemCount = inventory.filter(x => x !== null).length;
-      sanityDelta -= itemCount * P.sanityItemPenalty * dt;
       // 적 근처: 감소
       for (const e of enemies) {
         if (e.dead) continue;
@@ -2110,12 +2110,18 @@ function updatePlayer(dt) {
         const edist = Math.sqrt((ex-px2)**2 + (ey-py2)**2);
         if (edist < 150) {
           sanityDelta -= P.sanityDecayNearEnemy * dt;
+          isUnderStress = true;
           // 버서커 근처: 공포 타이머
           if (e.subtype === 'berserker' && timeOfDay === 'night' && edist < 200) {
             player.fearTimer = Math.max(player.fearTimer, 2.0);
           }
           break;
         }
+      }
+      // 집착 패널티: 스트레스 상황에서만 추가 가속 (낮에 안전할 때는 안 깎임)
+      if (isUnderStress) {
+        const itemCount = inventory.filter(x => x !== null).length;
+        sanityDelta -= itemCount * P.sanityItemPenalty * dt;
       }
     }
     player.sanity = Math.max(0, Math.min(player.maxSanity, player.sanity + sanityDelta));
