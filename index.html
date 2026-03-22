@@ -129,6 +129,7 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
   <button id="btn-params">⚙️ 파라미터</button>
   <button id="btn-save">💾 저장</button>
   <button id="btn-load">📂 불러오기</button>
+  <button id="btn-browse">🌐 서버 레벨</button>
   <button id="btn-clipboard">📋 복사</button>
   <button id="btn-help">❓ 도움말</button>
   <div style="flex:1"></div>
@@ -274,6 +275,20 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
       style="padding:6px 20px;background:#2a2a50;color:#e0b040;border:1px solid #e0b040;border-radius:4px;cursor:pointer;">
       닫기
     </button>
+  </div>
+</div>
+
+<!-- Level Browser Overlay -->
+<div id="level-browser" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+  background:rgba(10,10,20,0.97); border:1px solid #333; border-radius:8px; padding:20px 28px;
+  z-index:200; color:#bbb; font-size:12px; min-width:360px; max-width:500px; max-height:70vh; overflow-y:auto;">
+  <h2 style="color:#e0b040; margin-bottom:12px; font-size:16px;">🌐 서버 레벨 목록</h2>
+  <div id="level-list" style="min-height:40px;">
+    <span style="color:#666;">로딩 중...</span>
+  </div>
+  <div style="text-align:center; margin-top:14px;">
+    <button id="level-browser-close" style="padding:6px 20px; background:#2a2a50; color:#e0b040;
+      border:1px solid #e0b040; border-radius:4px; cursor:pointer;">닫기</button>
   </div>
 </div>
 
@@ -783,6 +798,66 @@ function loadFile(file) {
   };
   reader.readAsText(file);
 }
+// === Level Browser (GitHub API) ===
+const REPO_API = 'https://api.github.com/repos/jinwoo0402j/yoonhoe-prototype/contents/levels';
+
+async function openLevelBrowser() {
+  const overlay = document.getElementById('level-browser');
+  const listEl = document.getElementById('level-list');
+  overlay.style.display = 'block';
+  listEl.innerHTML = '<span style="color:#666;">로딩 중...</span>';
+
+  try {
+    const res = await fetch(REPO_API);
+    if (!res.ok) throw new Error('API 실패');
+    const files = await res.json();
+    const jsonFiles = files.filter(f => f.name.endsWith('.json'));
+
+    if (jsonFiles.length === 0) {
+      listEl.innerHTML = '<span style="color:#666;">레벨 파일이 없어요</span>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    for (const file of jsonFiles) {
+      const btn = document.createElement('div');
+      btn.style.cssText = 'padding:8px 12px; margin:4px 0; background:#1a1a2e; border:1px solid #333; border-radius:4px; cursor:pointer; transition:all 0.15s; display:flex; justify-content:space-between; align-items:center;';
+      const name = file.name.replace('.json', '');
+      btn.innerHTML = `<span style="color:#ddd;">📄 ${name}</span><span style="color:#666; font-size:10px;">${(file.size/1024).toFixed(1)}KB</span>`;
+      btn.addEventListener('mouseenter', () => { btn.style.borderColor = '#e0b040'; btn.style.background = '#252545'; });
+      btn.addEventListener('mouseleave', () => { btn.style.borderColor = '#333'; btn.style.background = '#1a1a2e'; });
+      btn.addEventListener('click', () => loadFromServer(file.download_url, name));
+      listEl.appendChild(btn);
+    }
+  } catch (err) {
+    listEl.innerHTML = `<span style="color:#f88;">오류: ${err.message}</span>`;
+  }
+}
+
+async function loadFromServer(url, name) {
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.objects) {
+      saveState();
+      levelObjects = data.objects;
+      nextId = Math.max(...levelObjects.map(o => o.id), 0) + 1;
+      if (data.spawn) spawnPoint = data.spawn;
+      if (data.params) Object.assign(P, data.params);
+      rebuildColliders();
+      initParams();
+      resetPlayer();
+      document.getElementById('level-browser').style.display = 'none';
+      // Flash notification
+      const badge = document.getElementById('mode-badge');
+      const orig = badge.textContent;
+      badge.textContent = `✅ "${name}" 로드 완료!`;
+      badge.style.color = '#4f4';
+      setTimeout(() => { badge.textContent = orig; badge.style.color = ''; }, 2000);
+    }
+  } catch (err) { console.error('Load error:', err); }
+}
+
 function copyToClipboard() {
   const data = { version: 1, params: { ...P }, spawn: spawnPoint, objects: levelObjects };
   navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
@@ -803,6 +878,10 @@ document.getElementById('btn-save').addEventListener('click', saveLevel);
 document.getElementById('btn-load').addEventListener('click', () => document.getElementById('file-input').click());
 document.getElementById('btn-clipboard').addEventListener('click', copyToClipboard);
 document.getElementById('btn-help').addEventListener('click', toggleHelp);
+document.getElementById('btn-browse').addEventListener('click', openLevelBrowser);
+document.getElementById('level-browser-close').addEventListener('click', () => {
+  document.getElementById('level-browser').style.display = 'none';
+});
 
 document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
   b.addEventListener('click', () => selectTool(b.dataset.tool));
