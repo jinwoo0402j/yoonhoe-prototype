@@ -215,7 +215,21 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
   <div class="param-row"><label>무적(ms)</label><input type="range" id="p_rollIframe" min="50" max="500" step="10"><span class="val"></span></div>
   <h2>🤺 패링 (공격 맞받아치기)</h2>
   <div class="param-row"><label>패링 넉백</label><input type="range" id="p_parryKnockback" min="50" max="400" step="10"><span class="val"></span></div>
-  <div class="param-row"><label>적 경직(ms)</label><input type="range" id="p_parryStun" min="200" max="2000" step="50"><span class="val"></span></div>
+  <div class="param-row"><label>패링 경직치</label><input type="range" id="p_parryStagger" min="10" max="60" step="5"><span class="val"></span></div>
+  <h2>👾 적 AI</h2>
+  <div class="param-row"><label>감지 범위</label><input type="range" id="p_enemyDetectRange" min="50" max="400" step="10"><span class="val"></span></div>
+  <div class="param-row"><label>추적 속도</label><input type="range" id="p_enemyChaseSpd" min="40" max="250" step="10"><span class="val"></span></div>
+  <div class="param-row"><label>공격 사거리</label><input type="range" id="p_enemyAtkRange" min="15" max="80" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>예비동작(ms)</label><input type="range" id="p_enemyWindup" min="100" max="800" step="50"><span class="val"></span></div>
+  <div class="param-row"><label>공격 판정(ms)</label><input type="range" id="p_enemyAtkDur" min="50" max="400" step="10"><span class="val"></span></div>
+  <div class="param-row"><label>후딜(ms)</label><input type="range" id="p_enemyRecovery" min="100" max="1000" step="50"><span class="val"></span></div>
+  <div class="param-row"><label>공격력</label><input type="range" id="p_enemyAtkDmg" min="1" max="5" step="1"><span class="val"></span></div>
+  <h2>☯️ 카르마</h2>
+  <div class="param-row"><label>피니셔 카르마</label><input type="range" id="p_karmaFinisher" min="5" max="40" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>포옹 카르마</label><input type="range" id="p_karmaEmbrace" min="-40" max="-5" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>일반처치 카르마</label><input type="range" id="p_karmaKill" min="1" max="20" step="1"><span class="val"></span></div>
+  <div class="param-row"><label>자동 임계</label><input type="range" id="p_karmaAutoThreshold" min="40" max="100" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>강조 임계</label><input type="range" id="p_karmaHighlightThreshold" min="10" max="60" step="5"><span class="val"></span></div>
   <h2>🧱 벽</h2>
   <div class="param-row"><label>벽타기 속도</label><input type="range" id="p_wallSlideSpd" min="20" max="200" step="5"><span class="val"></span></div>
   <div class="param-row"><label>벽점프 X</label><input type="range" id="p_wallJumpX" min="100" max="500" step="10"><span class="val"></span></div>
@@ -417,7 +431,11 @@ const P = {
   jumpSpd: 580, gravity: 1800, maxFall: 480, jumpCut: 0.35,
   coyoteTime: 70, jumpBuffer: 80, riseGravMul: 0.85, fallGravMul: 1.4,
   rollSpd: 400, rollDur: 250, rollCd: 600, rollIframe: 220,
-  parryKnockback: 180, parryStun: 800,
+  parryKnockback: 180, parryStagger: 30,
+  enemyDetectRange: 150, enemyChaseSpd: 100, enemyAtkRange: 35,
+  enemyWindup: 300, enemyAtkDur: 150, enemyRecovery: 400, enemyAtkDmg: 1,
+  karmaFinisher: 15, karmaEmbrace: -15, karmaKill: 5,
+  karmaAutoThreshold: 70, karmaHighlightThreshold: 30,
   wallSlideSpd: 72, wallJumpX: 200, wallJumpY: 540, wallJumpLock: 170,
   camSpdX: 4.5, camSpdY: 3.5, camDeadX: 30, camDeadY: 15, camOffY: 40,
   // Combat
@@ -569,7 +587,6 @@ function resetPlayer() {
   player.rolling = false; player.rollTimer = 0; player.rollCdTimer = 0;
   player.wallSliding = false; player.wallJumpLockTimer = 0;
   player.hurtInvincTimer = 0; player.hurtKnockTimer = 0;
-  player.parrying = false; player.parryTimer = 0; player.parryCdTimer = 0;
   player.attacking = false; player.atkTimer = 0; player.atkCdTimer = 0;
   // Reset enemies
   rebuildColliders();
@@ -595,6 +612,14 @@ function rebuildColliders() {
     facingRight: true,
     squash: 1, stretch: 1,
     walkCycle: 0,
+    // AI FSM
+    aiState: 'patrol', aiTimer: 0,
+    // Stagger
+    stagger: 0, staggerMax: 100, staggerDecay: 5,
+    // Embrace animation
+    embracing: false, embraceTimer: 0, embraceAlpha: 1,
+    // Auto karma timer
+    autoKarmaTimer: 0,
   }));
   document.getElementById('obj-count').textContent = `오브젝트: ${levelObjects.length}`;
 }
@@ -603,6 +628,8 @@ rebuildColliders();
 // === Particles & Ghosts ===
 const particles = [];
 const ghosts = [];
+const floatingTexts = [];
+let karma = 0;
 function emit(x, y, count, color, vxR, vyR, life, sizeR) {
   for (let i = 0; i < count; i++) {
     particles.push({ x, y,
@@ -1133,25 +1160,31 @@ function updatePlayer(dt) {
     player.squash = 0.6; player.stretch = 1.4; return;
   }
 
-  // Finisher (피니셔) — V키, 기절한 적 옆에서 확인사살
-  if (justPressed['KeyV']) {
-    const pb = { x: player.x - 20, y: player.y - 10, w: player.w + 40, h: player.h + 20 };
-    for (const e of enemies) {
-      if (e.dead || e.stunTimer <= 0) continue;
-      const eb = { x: e.x, y: e.y, w: e.w, h: e.h };
-      if (rectOverlap(pb, eb)) {
-        // 피니셔 실행!
-        e.dead = true;
-        cam.shake = 5;
-        player.hitstopTimer = 120;
-        // 강렬한 피니셔 이펙트
-        emit(e.x + e.w/2, e.y + e.h/2, 20, '#f44', [-100,100], [-100,30], 0.5, [2,6]);
-        emit(e.x + e.w/2, e.y + e.h/2, 10, '#fff', [-50,50], [-50,10], 0.3, [1,3]);
-        emit(e.x + e.w/2, e.y + e.h/2, 8, '#ff8800', [-80,80], [-80,20], 0.4, [3,5]);
-        player.squash = 0.8; player.stretch = 1.2;
-        break;
-      }
-    }
+  // Finisher/Embrace is now handled in enemy FSM stunned state (V/F keys)
+
+  // Helper functions for finisher and embrace
+  function doFinisher(e) {
+    e.dead = true; e.stunTimer = 0;
+    cam.shake = 5;
+    player.hitstopTimer = 120;
+    emit(e.x + e.w/2, e.y + e.h/2, 20, '#f44', [-100,100], [-100,30], 0.5, [2,6]);
+    emit(e.x + e.w/2, e.y + e.h/2, 10, '#fff', [-50,50], [-50,10], 0.3, [1,3]);
+    emit(e.x + e.w/2, e.y + e.h/2, 8, '#ff8800', [-80,80], [-80,20], 0.4, [3,5]);
+    player.squash = 0.8; player.stretch = 1.2;
+    karma = Math.min(100, karma + P.karmaFinisher);
+    floatingTexts.push({ x: e.x + e.w/2, y: e.y - 10, text: '⚔️ 처치', color: '#f44', life: 1.2 });
+  }
+
+  function doEmbrace(e) {
+    e.dead = true; e.stunTimer = 0;
+    e.embracing = true; e.embraceTimer = 800; e.embraceAlpha = 1;
+    cam.shake = 1;
+    // 금빛 파티클 (평온한 성불)
+    emit(e.x + e.w/2, e.y + e.h/2, 20, '#ffe080', [-30,30], [-60,-120], 0.6, [2,5]);
+    emit(e.x + e.w/2, e.y + e.h/2, 10, '#fff', [-20,20], [-40,-80], 0.5, [1,3]);
+    player.squash = 1.1; player.stretch = 0.9;
+    karma = Math.max(-100, karma + P.karmaEmbrace);
+    floatingTexts.push({ x: e.x + e.w/2, y: e.y - 10, text: '🤗 성불', color: '#ffe080', life: 1.5 });
   }
 
   // Wall slide
@@ -1285,6 +1318,7 @@ function updatePlayer(dt) {
           e.dead = true;
           emit(e.x + e.w/2, e.y + e.h/2, 15, '#f84', [-80,80], [-80,20], 0.4, [2,5]);
           emit(e.x + e.w/2, e.y + e.h/2, 10, '#fff', [-60,60], [-60,10], 0.3, [1,3]);
+          karma = Math.min(100, karma + P.karmaKill);
         }
       }
     }
@@ -1309,28 +1343,165 @@ function updatePlayer(dt) {
   else if (Math.abs(player.vx) > 10) player.state = '이동';
   else player.state = '대기';
 
-  // === Update Enemies ===
+  // === Update Enemies (FSM + Stagger + Karma) ===
   for (const e of enemies) {
-    if (e.dead) continue;
+    if (e.dead) {
+      // Embrace fade-out animation
+      if (e.embracing) {
+        e.embraceTimer -= dt * 1000;
+        e.embraceAlpha = Math.max(0, e.embraceTimer / 800);
+        if (e.embraceTimer > 400) emit(e.x + e.w/2, e.y + Math.random()*e.h, 1, '#ffe080', [-10,10], [-40,-80], 0.4, [2,4]);
+        if (e.embraceTimer <= 0) e.embracing = false;
+      }
+      continue;
+    }
     e.hurtTimer = Math.max(0, e.hurtTimer - dt * 1000);
     e.squash += (1 - e.squash) * Math.min(1, dt * 10);
     e.stretch += (1 - e.stretch) * Math.min(1, dt * 10);
+
+    // Stagger decay
+    if (e.stagger > 0 && e.stunTimer <= 0) {
+      e.stagger = Math.max(0, e.stagger - e.staggerDecay * dt);
+    }
 
     // Gravity
     e.vy += P.gravity * dt;
     if (e.vy > P.maxFall) e.vy = P.maxFall;
 
-    // Patrol AI (simple)
+    // Distance to player
+    const distX = (player.x + player.w/2) - (e.x + e.w/2);
+    const absDist = Math.abs(distX);
+
+    // === AI State Machine ===
+    e.aiTimer = Math.max(0, e.aiTimer - dt * 1000);
+
     if (e.stunTimer > 0) {
-      e.vx *= 0.85; // stunned, slow down
-    } else if (e.hurtTimer <= 0) {
-      e.vx = e.patrolDir * 60;
-      e.facingRight = e.patrolDir > 0;
-      if (e.x > e.originX + e.patrolRange) e.patrolDir = -1;
-      if (e.x < e.originX - e.patrolRange) e.patrolDir = 1;
+      // STUNNED — 기절 상태
+      e.stunTimer = Math.max(0, e.stunTimer - dt * 1000);
+      e.vx *= 0.85;
+
+      // Auto-karma check
+      if (e.autoKarmaTimer > 0) {
+        e.autoKarmaTimer -= dt * 1000;
+        if (e.autoKarmaTimer <= 0) {
+          if (karma >= P.karmaAutoThreshold) {
+            doFinisher(e); // 자동 피니셔
+          } else if (karma <= -P.karmaAutoThreshold) {
+            doEmbrace(e); // 자동 포옹
+          }
+        }
+      }
+
+      // Choice input (V/F) when stunned
+      if (e.stunTimer > 0 && e.autoKarmaTimer <= 0) {
+        const autoKarma = Math.abs(karma) >= P.karmaAutoThreshold;
+        if (!autoKarma) {
+          if (justPressed['KeyV']) doFinisher(e);
+          if (justPressed['KeyF']) doEmbrace(e);
+        }
+      }
+
+      // If stun expires, reset
+      if (e.stunTimer <= 0) {
+        e.stagger = 0;
+        e.aiState = 'patrol';
+      }
+    } else if (e.aiState === 'patrol') {
+      // PATROL — 순찰
+      if (e.hurtTimer <= 0) {
+        e.vx = e.patrolDir * 60;
+        e.facingRight = e.patrolDir > 0;
+        if (e.x > e.originX + e.patrolRange) e.patrolDir = -1;
+        if (e.x < e.originX - e.patrolRange) e.patrolDir = 1;
+        e.walkCycle += Math.abs(e.vx) * dt * 0.05;
+      } else { e.vx *= 0.9; }
+      // Detect player
+      if (absDist < P.enemyDetectRange) e.aiState = 'chase';
+    } else if (e.aiState === 'chase') {
+      // CHASE — 추적
+      e.facingRight = distX > 0;
+      e.vx = (distX > 0 ? 1 : -1) * P.enemyChaseSpd;
       e.walkCycle += Math.abs(e.vx) * dt * 0.05;
-    } else {
-      e.vx *= 0.9;
+      if (absDist < P.enemyAtkRange) {
+        e.aiState = 'windup';
+        e.aiTimer = P.enemyWindup;
+        e.vx = 0;
+      }
+      if (absDist > P.enemyDetectRange * 1.5) e.aiState = 'patrol';
+    } else if (e.aiState === 'windup') {
+      // WINDUP — 예비동작 (텔레그래프)
+      e.vx = 0;
+      e.facingRight = distX > 0;
+      if (e.aiTimer <= 0) {
+        e.aiState = 'attack';
+        e.aiTimer = P.enemyAtkDur;
+      }
+    } else if (e.aiState === 'attack') {
+      // ATTACK — 공격 판정!
+      e.vx = 0;
+      const atkDir = e.facingRight ? 1 : -1;
+      const atkBox = {
+        x: e.facingRight ? e.x + e.w : e.x - P.enemyAtkRange,
+        y: e.y - 4, w: P.enemyAtkRange, h: e.h + 8
+      };
+      const pb = { x: player.x, y: player.y, w: player.w, h: player.h };
+      if (rectOverlap(atkBox, pb) && !player.invincible && player.hurtInvincTimer <= 0) {
+        if (player.attacking) {
+          // ⚔️ 패링! 공격과 공격이 맞부딪힘!
+          const pdir = player.x + player.w/2 < e.x + e.w/2 ? -1 : 1;
+          player.vx = pdir * P.parryKnockback; player.vy = -60;
+          player.attacking = false; player.atkTimer = 0;
+          e.vx = -pdir * P.parryKnockback;
+          // 경직 게이지 증가
+          e.stagger = Math.min(e.staggerMax, e.stagger + P.parryStagger);
+          e.squash = 1.4; e.stretch = 0.6;
+          player.squash = 1.2; player.stretch = 0.8;
+          cam.shake = 4;
+          player.hitstopTimer = 80;
+          player.hurtInvincTimer = 300;
+          // 패링 이펙트
+          const mx = (player.x + player.w/2 + e.x + e.w/2) / 2;
+          const my = (player.y + player.h/2 + e.y + e.h/2) / 2;
+          emit(mx, my, 12, '#ffe080', [-80,80], [-80,40], 0.25, [2,5]);
+          emit(mx, my, 6, '#fff', [-40,40], [-40,20], 0.15, [1,3]);
+          // 경직 100% → 기절!
+          if (e.stagger >= e.staggerMax) {
+            e.stunTimer = 2000;
+            e.aiState = 'patrol';
+            cam.shake = 6;
+            emit(e.x + e.w/2, e.y, 15, '#ffe080', [-60,60], [-80,20], 0.4, [2,5]);
+            // Auto-karma check
+            if (Math.abs(karma) >= P.karmaAutoThreshold) {
+              e.autoKarmaTimer = 500;
+            }
+          }
+          e.aiState = e.stunTimer > 0 ? 'patrol' : 'recovery';
+          e.aiTimer = P.enemyRecovery;
+        } else {
+          // 플레이어 피격
+          player.hp -= P.enemyAtkDmg;
+          player.hurtInvincTimer = 1000;
+          player.hurtKnockTimer = 200;
+          const dir = player.x + player.w/2 < e.x + e.w/2 ? -1 : 1;
+          player.vx = dir * 150; player.vy = -180;
+          cam.shake = 3;
+          player.squash = 1.3; player.stretch = 0.7;
+          emit(player.x + player.w/2, player.y + player.h/2, 10, '#f55', [-60,60], [-60,20], 0.3);
+          if (player.hp <= 0) resetPlayer();
+          e.aiState = 'recovery';
+          e.aiTimer = P.enemyRecovery;
+        }
+      }
+      if (e.aiTimer <= 0 && e.aiState === 'attack') {
+        e.aiState = 'recovery';
+        e.aiTimer = P.enemyRecovery;
+      }
+    } else if (e.aiState === 'recovery') {
+      // RECOVERY — 후딜
+      e.vx = 0;
+      if (e.aiTimer <= 0) {
+        e.aiState = absDist < P.enemyDetectRange ? 'chase' : 'patrol';
+      }
     }
 
     e.x += e.vx * dt;
@@ -1355,51 +1526,15 @@ function updatePlayer(dt) {
       eb.x = e.x; eb.y = e.y;
     }
 
-    // Stun timer (기절 상태)
-    if (e.stunTimer > 0) {
-      e.stunTimer = Math.max(0, e.stunTimer - dt * 1000);
-      e.vx = 0; // 기절 중 안 움직임
-    }
-
-    // Damage player on contact (기절 중이면 피해 안 줌)
-    if (!player.invincible && player.hurtInvincTimer <= 0 && e.hurtTimer <= 0 && e.stunTimer <= 0) {
-      const pb = { x: player.x, y: player.y, w: player.w, h: player.h };
-      if (rectOverlap(pb, eb)) {
-        // 패링 체크 — 플레이어가 공격 중일 때 적과 부딪히면 = 칼과 칼이 맞음!
-        if (player.attacking) {
-          // 패링 성공! 양쪽 튕겨남 + 적 경직
-          const pdir = player.x + player.w/2 < e.x + e.w/2 ? -1 : 1;
-          player.vx = pdir * P.parryKnockback; player.vy = -60;
-          player.attacking = false; player.atkTimer = 0;
-          e.vx = -pdir * P.parryKnockback;
-          e.stunTimer = P.parryStun;
-          e.squash = 1.4; e.stretch = 0.6;
-          player.squash = 1.2; player.stretch = 0.8;
-          cam.shake = 4;
-          player.hitstopTimer = 80;
-          player.hurtInvincTimer = 300; // 패링 후 짧은 무적
-          // 패링 이펙트 — 금빛 스파크 (칼끼리 부딪힌 지점)
-          const mx = (player.x + player.w/2 + e.x + e.w/2) / 2;
-          const my = (player.y + player.h/2 + e.y + e.h/2) / 2;
-          emit(mx, my, 12, '#ffe080', [-80,80], [-80,40], 0.25, [2,5]);
-          emit(mx, my, 6, '#fff', [-40,40], [-40,20], 0.15, [1,3]);
-        } else {
-          // 일반 피격
-          player.hp--;
-          player.hurtInvincTimer = 1000;
-          player.hurtKnockTimer = 200;
-          const dir = player.x + player.w/2 < e.x + e.w/2 ? -1 : 1;
-          player.vx = dir * 150; player.vy = -180;
-          cam.shake = 3;
-          player.squash = 1.3; player.stretch = 0.7;
-          emit(player.x + player.w/2, player.y + player.h/2, 10, '#f55', [-60,60], [-60,20], 0.3);
-          if (player.hp <= 0) resetPlayer();
-        }
-      }
-    }
-
     // Fall off screen
     if (e.y > 900) e.dead = true;
+  }
+
+  // Update floating texts
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i];
+    ft.y -= 40 * dt; ft.life -= dt;
+    if (ft.life <= 0) floatingTexts.splice(i, 1);
   }
 
   // Particles / ghosts
@@ -1573,6 +1708,22 @@ function draw() {
 
   // === Enemies ===
   if (!editorMode) {
+    // Embrace fade-out ghosts
+    for (const e of enemies) {
+      if (e.dead && e.embracing && e.embraceAlpha > 0) {
+        const ecx = e.x + e.w / 2;
+        ctx.globalAlpha = e.embraceAlpha * 0.6;
+        ctx.fillStyle = '#ffe080';
+        ctx.beginPath();
+        ctx.arc(ecx, e.y + e.h * 0.5, e.w * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.ellipse(ecx, e.y + e.h * 0.5, e.w * 0.4, e.h * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
     for (const e of enemies) {
       if (e.dead) continue;
       const ecx = e.x + e.w / 2;
@@ -1596,8 +1747,29 @@ function draw() {
         ctx.globalAlpha *= 0.7;
       }
 
+      // Windup telegraph flash
+      if (e.aiState === 'windup') {
+        const flash = Math.sin(gameTime * 20) > 0 ? 0.5 : 0;
+        ctx.fillStyle = `rgba(255,100,100,${flash})`;
+        ctx.beginPath();
+        ctx.arc(ecx, e.y + e.h * 0.5, e.w * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Attack slash arc
+      if (e.aiState === 'attack') {
+        const dir = e.facingRight ? 1 : -1;
+        const progress = 1 - (e.aiTimer / P.enemyAtkDur);
+        ctx.strokeStyle = `rgba(255,80,80,${0.8 - progress * 0.6})`;
+        ctx.lineWidth = 3 * (1 - progress);
+        ctx.beginPath();
+        ctx.arc(ecx + dir * 12, e.y + e.h * 0.5, P.enemyAtkRange * 0.8,
+          dir > 0 ? -0.8 + progress : Math.PI - 0.8 + progress,
+          dir > 0 ? 0.8 - progress * 0.5 : Math.PI + 0.8 - progress * 0.5);
+        ctx.stroke();
+      }
+
       // Body
-      ctx.fillStyle = e.stunTimer > 0 ? '#3a1030' : '#5a2040';
+      ctx.fillStyle = e.stunTimer > 0 ? '#3a1030' : e.aiState === 'windup' ? '#7a2050' : e.aiState === 'attack' ? '#8a3060' : '#5a2040';
       ctx.beginPath();
       ctx.ellipse(ecx, e.y + e.h * 0.6, e.w * 0.45, e.h * 0.4, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -1634,6 +1806,59 @@ function draw() {
         ctx.fillStyle = '#333'; ctx.fillRect(bx, by, barW, barH);
         ctx.fillStyle = '#f44'; ctx.fillRect(bx, by, barW * (e.hp / e.maxHp), barH);
       }
+      // Stagger bar (경직 게이지)
+      if (e.stagger > 0) {
+        const barW = 30, barH = 3;
+        const bx = ecx - barW / 2, by = e.y - 13;
+        ctx.fillStyle = '#222'; ctx.fillRect(bx, by, barW, barH);
+        const pct = e.stagger / e.staggerMax;
+        ctx.fillStyle = pct >= 1 ? '#fff' : '#e0b040'; ctx.fillRect(bx, by, barW * pct, barH);
+      }
+      // AI state indicator
+      if (e.aiState === 'chase') {
+        ctx.fillStyle = '#f88'; ctx.font = `${8}px sans-serif`;
+        ctx.fillText('❗', ecx - 4, e.y - 16);
+      }
+      // Choice UI when stunned
+      if (e.stunTimer > 0) {
+        const choiceY = e.y - 26;
+        const isAuto = Math.abs(karma) >= P.karmaAutoThreshold;
+        if (isAuto) {
+          // Auto — 선택 불가
+          const autoText = karma >= P.karmaAutoThreshold ? '⚔️ ...' : '🤗 ...';
+          ctx.fillStyle = karma >= P.karmaAutoThreshold ? '#f44' : '#ffe080';
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(autoText, ecx, choiceY);
+          ctx.textAlign = 'left';
+        } else {
+          // 양쪽 선택지
+          const hi = P.karmaHighlightThreshold;
+          const finAlpha = karma > hi ? 1 : karma < -hi ? 0.3 : 0.7;
+          const embAlpha = karma < -hi ? 1 : karma > hi ? 0.3 : 0.7;
+          ctx.font = '9px monospace';
+          ctx.textAlign = 'center';
+          ctx.globalAlpha = finAlpha;
+          ctx.fillStyle = '#f88';
+          ctx.fillText('V:⚔️', ecx - 22, choiceY);
+          ctx.globalAlpha = embAlpha;
+          ctx.fillStyle = '#ffe080';
+          ctx.fillText('F:🤗', ecx + 22, choiceY);
+          ctx.globalAlpha = 1;
+          ctx.textAlign = 'left';
+        }
+      }
+    }
+
+    // Floating texts
+    for (const ft of floatingTexts) {
+      ctx.globalAlpha = Math.min(1, ft.life);
+      ctx.fillStyle = ft.color;
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(ft.text, ft.x, ft.y);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -1883,6 +2108,29 @@ function drawHUD() {
   // State
   ctx.fillStyle = '#e0b040'; ctx.font = '11px monospace';
   ctx.fillText(player.state, 12, 98);
+
+  // Karma bar
+  const kbW = 80, kbH = 6, kbX = 12, kbY = canvas.height - 40;
+  ctx.fillStyle = '#1a1a2a'; ctx.fillRect(kbX, kbY, kbW, kbH);
+  // Gold left (mercy), Red right (kill)
+  const kPct = (karma + 100) / 200; // 0=mercy, 1=kill
+  ctx.fillStyle = '#333'; ctx.fillRect(kbX, kbY, kbW, kbH);
+  // Gradient fill
+  const kGrad = ctx.createLinearGradient(kbX, 0, kbX + kbW, 0);
+  kGrad.addColorStop(0, '#ffe080'); kGrad.addColorStop(1, '#f44');
+  ctx.fillStyle = kGrad; ctx.fillRect(kbX, kbY, kbW, kbH);
+  ctx.fillStyle = 'rgba(10,10,20,0.5)'; ctx.fillRect(kbX, kbY, kbW, kbH);
+  // Marker
+  const mkX = kbX + kPct * kbW;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(mkX - 1, kbY - 2, 3, kbH + 4);
+  // Labels
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = '#ffe080'; ctx.fillText('🤗', kbX - 2, kbY - 4);
+  ctx.fillStyle = '#f44'; ctx.fillText('⚔️', kbX + kbW - 8, kbY - 4);
+  // Value
+  ctx.fillStyle = '#666'; ctx.font = '8px monospace';
+  ctx.fillText(`${karma}`, kbX + kbW + 4, kbY + 5);
 }
 
 // === Main loop ===
