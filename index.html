@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>윤회_무명 — 레벨 디자인 툴 v1 (Hollow Knight 기반)</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a12; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+canvas { display: block; position: fixed; left: 0; top: 0; }
+
+/* === Top bar === */
+#topbar {
+  position: fixed; left: 0; top: 0; right: 0; height: 36px;
+  background: rgba(10,10,20,0.95); border-bottom: 1px solid #2a2a3a;
+  display: flex; align-items: center; padding: 0 12px; z-index: 100;
+  gap: 8px; font-size: 12px; color: #aaa;
+}
+#topbar .sep { width: 1px; height: 20px; background: #333; margin: 0 4px; }
+#topbar button {
+  padding: 4px 10px; background: #1a1a2e; color: #bbb; border: 1px solid #333;
+  border-radius: 3px; cursor: pointer; font-size: 11px; transition: all 0.15s;
+}
+#topbar button:hover { background: #252545; border-color: #e0b040; color: #e0b040; }
+#topbar button.active { background: #2a2a50; border-color: #e0b040; color: #e0b040; }
+#topbar .mode-badge {
+  padding: 4px 12px; border-radius: 3px; font-weight: bold; font-size: 12px;
+  letter-spacing: 1px;
+}
+#topbar .mode-play { background: #1a3a1a; color: #4f4; border: 1px solid #3a5a3a; }
+#topbar .mode-edit { background: #3a2a1a; color: #fb4; border: 1px solid #5a4a2a; }
+
+/* === Left palette (edit mode) === */
+#palette {
+  position: fixed; left: 0; top: 36px; width: 200px; bottom: 0;
+  background: rgba(10,10,20,0.95); border-right: 1px solid #2a2a3a;
+  z-index: 90; overflow-y: auto; padding: 10px;
+  display: none; /* shown in edit mode */
+}
+#palette h3 {
+  color: #e0b040; font-size: 12px; margin: 10px 0 6px;
+  border-bottom: 1px solid #2a2a3a; padding-bottom: 3px;
+}
+#palette h3:first-child { margin-top: 0; }
+.tool-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; margin: 2px 0; border-radius: 4px;
+  cursor: pointer; color: #aaa; font-size: 11px;
+  border: 1px solid transparent; transition: all 0.15s;
+}
+.tool-btn:hover { background: #1a1a2e; border-color: #444; }
+.tool-btn.selected { background: #2a2a50; border-color: #e0b040; color: #e0b040; }
+.tool-swatch {
+  width: 20px; height: 20px; border-radius: 3px; border: 1px solid #444;
+  flex-shrink: 0;
+}
+.grid-row { display: flex; gap: 4px; margin: 4px 0; }
+.grid-btn {
+  flex: 1; padding: 4px; background: #1a1a2e; color: #999; border: 1px solid #333;
+  border-radius: 3px; cursor: pointer; font-size: 10px; text-align: center;
+}
+.grid-btn:hover { border-color: #666; }
+.grid-btn.active { background: #2a2a50; border-color: #e0b040; color: #e0b040; }
+
+/* === Right panel (params, same as before but collapsible) === */
+#params-panel {
+  position: fixed; right: 0; top: 36px; width: 280px; bottom: 0;
+  background: rgba(10,10,20,0.95); border-left: 1px solid #2a2a3a;
+  z-index: 90; overflow-y: auto; padding: 10px;
+  display: none;
+}
+#params-panel h2 {
+  color: #e0b040; font-size: 12px; margin: 10px 0 5px;
+  border-bottom: 1px solid #2a2a3a; padding-bottom: 3px;
+}
+#params-panel h2:first-child { margin-top: 0; }
+.param-row { display: flex; align-items: center; margin: 2px 0; }
+.param-row label { flex: 1; font-size: 10px; color: #888; }
+.param-row input[type=range] { width: 80px; margin: 0 4px; accent-color: #e0b040; height: 3px; }
+.param-row .val { width: 36px; text-align: right; font-size: 10px; color: #e0b040; font-family: monospace; }
+
+/* === Object inspector (edit mode) === */
+#inspector {
+  position: fixed; right: 0; top: 36px; width: 220px; bottom: 0;
+  background: rgba(10,10,20,0.95); border-left: 1px solid #2a2a3a;
+  z-index: 90; overflow-y: auto; padding: 10px; font-size: 11px; color: #aaa;
+  display: none;
+}
+#inspector h3 { color: #e0b040; font-size: 12px; margin: 0 0 8px; }
+#inspector .field { margin: 4px 0; }
+#inspector .field label { display: inline-block; width: 28px; color: #888; }
+#inspector .field input {
+  width: 60px; background: #1a1a2e; border: 1px solid #333; color: #ddd;
+  padding: 2px 4px; border-radius: 2px; font-size: 11px; font-family: monospace;
+}
+
+/* === Status bar === */
+#statusbar {
+  position: fixed; left: 0; bottom: 0; right: 0; height: 24px;
+  background: rgba(10,10,20,0.9); border-top: 1px solid #2a2a3a;
+  display: flex; align-items: center; padding: 0 12px; z-index: 100;
+  font-size: 10px; color: #666; gap: 16px; font-family: monospace;
+}
+
+/* === Help overlay === */
+#help-overlay {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background: rgba(10,10,20,0.97); border: 1px solid #333; border-radius: 8px;
+  padding: 20px 28px; z-index: 200; color: #bbb; font-size: 12px;
+  display: none; max-width: 500px; line-height: 1.8;
+}
+#help-overlay h2 { color: #e0b040; margin-bottom: 10px; font-size: 16px; }
+#help-overlay kbd {
+  background: #2a2a3a; padding: 1px 6px; border-radius: 3px;
+  border: 1px solid #444; color: #ddd; font-size: 11px;
+}
+#help-overlay .col2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- Top Bar -->
+<div id="topbar">
+  <span id="mode-badge" class="mode-badge mode-play">▶ PLAY</span>
+  <div class="sep"></div>
+  <button id="btn-mode" title="Tab">모드 전환</button>
+  <div class="sep"></div>
+  <button id="btn-params">⚙️ 파라미터</button>
+  <button id="btn-save">💾 저장</button>
+  <button id="btn-load">📂 불러오기</button>
+  <button id="btn-clipboard">📋 복사</button>
+  <button id="btn-help">❓ 도움말</button>
+  <div style="flex:1"></div>
+  <span id="obj-count" style="font-size:10px;color:#666;">오브젝트: 0</span>
+</div>
+
+<!-- Left Palette (Edit Mode) -->
+<div id="palette">
+  <h3>🎨 도구</h3>
+  <div class="tool-btn selected" data-tool="select">
+    <div class="tool-swatch" style="background:#555;display:flex;align-items:center;justify-content:center;font-size:14px;">⬚</div>
+    선택 / 이동
+  </div>
+  <div class="tool-btn" data-tool="platform">
+    <div class="tool-swatch" style="background:#333350;"></div>
+    플랫폼
+  </div>
+  <div class="tool-btn" data-tool="wall">
+    <div class="tool-swatch" style="background:#1e1e30;"></div>
+    벽
+  </div>
+  <div class="tool-btn" data-tool="ground">
+    <div class="tool-swatch" style="background:#1a1a2a;"></div>
+    지면
+  </div>
+  <div class="tool-btn" data-tool="oneway">
+    <div class="tool-swatch" style="background:#2a3a2a;border-top:2px solid #6a6;"></div>
+    원웨이 플랫폼
+  </div>
+  <div class="tool-btn" data-tool="hazard">
+    <div class="tool-swatch" style="background:#3a1a1a;"></div>
+    가시 (함정)
+  </div>
+  <div class="tool-btn" data-tool="spawn">
+    <div class="tool-swatch" style="background:#1a2a1a;display:flex;align-items:center;justify-content:center;font-size:12px;">🚩</div>
+    스폰 포인트
+  </div>
+  <div class="tool-btn" data-tool="erase">
+    <div class="tool-swatch" style="background:#2a1a1a;display:flex;align-items:center;justify-content:center;font-size:12px;">✕</div>
+    지우개
+  </div>
+
+  <h3>📐 그리드</h3>
+  <div class="grid-row">
+    <div class="grid-btn" data-grid="0">OFF</div>
+    <div class="grid-btn" data-grid="8">8px</div>
+    <div class="grid-btn active" data-grid="16">16px</div>
+    <div class="grid-btn" data-grid="32">32px</div>
+  </div>
+
+  <h3 style="margin-top:14px;">📏 점프 궤적</h3>
+  <div class="tool-btn" data-action="trajectory" id="btn-trajectory">
+    <div class="tool-swatch" style="background:#1a1a3a;display:flex;align-items:center;justify-content:center;font-size:12px;">⌒</div>
+    궤적 표시 ON/OFF
+  </div>
+</div>
+
+<!-- Right Panel: Params -->
+<div id="params-panel">
+  <h2>🏃 이동</h2>
+  <div class="param-row"><label>이동 속도</label><input type="range" id="p_moveSpd" min="100" max="500" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>공중 제어</label><input type="range" id="p_airControl" min="0.5" max="1.0" step="0.05"><span class="val"></span></div>
+  <h2>🦘 점프</h2>
+  <div class="param-row"><label>점프 속도</label><input type="range" id="p_jumpSpd" min="300" max="900" step="10"><span class="val"></span></div>
+  <div class="param-row"><label>중력</label><input type="range" id="p_gravity" min="800" max="4000" step="50"><span class="val"></span></div>
+  <div class="param-row"><label>최대 낙하</label><input type="range" id="p_maxFall" min="300" max="1500" step="50"><span class="val"></span></div>
+  <div class="param-row"><label>점프컷 계수</label><input type="range" id="p_jumpCut" min="0.1" max="0.8" step="0.05"><span class="val"></span></div>
+  <div class="param-row"><label>코요테(ms)</label><input type="range" id="p_coyoteTime" min="0" max="200" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>버퍼(ms)</label><input type="range" id="p_jumpBuffer" min="0" max="200" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>상승 중력</label><input type="range" id="p_riseGravMul" min="0.5" max="1.5" step="0.05"><span class="val"></span></div>
+  <div class="param-row"><label>하강 중력</label><input type="range" id="p_fallGravMul" min="1.0" max="2.5" step="0.05"><span class="val"></span></div>
+  <h2>💨 대시</h2>
+  <div class="param-row"><label>대시 속도</label><input type="range" id="p_dashSpd" min="300" max="1000" step="10"><span class="val"></span></div>
+  <div class="param-row"><label>대시 시간(ms)</label><input type="range" id="p_dashDur" min="50" max="500" step="10"><span class="val"></span></div>
+  <div class="param-row"><label>쿨타임(ms)</label><input type="range" id="p_dashCd" min="100" max="2000" step="50"><span class="val"></span></div>
+  <div class="param-row"><label>무적(ms)</label><input type="range" id="p_dashIframe" min="0" max="500" step="10"><span class="val"></span></div>
+  <h2>🧱 벽</h2>
+  <div class="param-row"><label>벽타기 속도</label><input type="range" id="p_wallSlideSpd" min="20" max="200" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>벽점프 X</label><input type="range" id="p_wallJumpX" min="100" max="500" step="10"><span class="val"></span></div>
+  <div class="param-row"><label>벽점프 Y</label><input type="range" id="p_wallJumpY" min="200" max="800" step="10"><span class="val"></span></div>
+  <div class="param-row"><label>잠금(ms)</label><input type="range" id="p_wallJumpLock" min="50" max="400" step="10"><span class="val"></span></div>
+  <h2>📷 카메라</h2>
+  <div class="param-row"><label>추적 X</label><input type="range" id="p_camSpdX" min="1" max="15" step="0.5"><span class="val"></span></div>
+  <div class="param-row"><label>추적 Y</label><input type="range" id="p_camSpdY" min="1" max="15" step="0.5"><span class="val"></span></div>
+  <div class="param-row"><label>데드존 X</label><input type="range" id="p_camDeadX" min="0" max="100" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>데드존 Y</label><input type="range" id="p_camDeadY" min="0" max="80" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>수직 오프셋</label><input type="range" id="p_camOffY" min="-100" max="100" step="5"><span class="val"></span></div>
+</div>
+
+<!-- Object Inspector (Edit Mode) -->
+<div id="inspector">
+  <h3>📋 오브젝트 속성</h3>
+  <div id="insp-content"><span style="color:#555">오브젝트를 선택하세요</span></div>
+</div>
+
+<!-- Status Bar -->
+<div id="statusbar">
+  <span id="sb-pos">마우스: 0, 0</span>
+  <span id="sb-grid">그리드: 16px</span>
+  <span id="sb-player">플레이어: 0, 0</span>
+  <span id="sb-zoom">줌: 100%</span>
+  <span style="flex:1"></span>
+  <span>Tab: 모드전환 | H: 도움말</span>
+</div>
+
+<!-- Help Overlay -->
+<div id="help-overlay">
+  <h2>🎮 윤회_무명 레벨 디자인 툴</h2>
+  <div class="col2">
+    <div>
+      <b>공통</b><br>
+      <kbd>Tab</kbd> 플레이 ↔ 에디트<br>
+      <kbd>H</kbd> 도움말<br>
+      <kbd>Ctrl+Z</kbd> 되돌리기<br>
+      <kbd>Ctrl+Shift+Z</kbd> 다시하기<br>
+    </div>
+    <div>
+      <b>플레이 모드</b><br>
+      <kbd>← →</kbd> 이동<br>
+      <kbd>Space</kbd> 점프<br>
+      <kbd>Z</kbd> / <kbd>Shift</kbd> 대시<br>
+      <kbd>↑↓</kbd> 길게: 카메라<br>
+    </div>
+    <div style="margin-top:8px;">
+      <b>에디트 모드</b><br>
+      <kbd>좌클릭 드래그</kbd> 배치<br>
+      <kbd>우클릭</kbd> 삭제<br>
+      <kbd>1~7</kbd> 도구 선택<br>
+      <kbd>G</kbd> 그리드 순환<br>
+      <kbd>WASD</kbd> / <kbd>마우스휠</kbd> 카메라<br>
+      <kbd>Ctrl+휠</kbd> 줌<br>
+      <kbd>T</kbd> 궤적 표시<br>
+      <kbd>Delete</kbd> 선택 삭제<br>
+    </div>
+    <div style="margin-top:8px;">
+      <b>파일</b><br>
+      <kbd>Ctrl+S</kbd> 저장 (다운로드)<br>
+      드래그앤드롭 .json 불러오기<br>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:12px;">
+    <button onclick="document.getElementById('help-overlay').style.display='none'"
+      style="padding:6px 20px;background:#2a2a50;color:#e0b040;border:1px solid #e0b040;border-radius:4px;cursor:pointer;">
+      닫기
+    </button>
+  </div>
+</div>
+
+<!-- Hidden file input -->
+<input type="file" id="file-input" accept=".json" style="display:none">
+
+<script>
+// ============================================================
+// 윤회_무명 Level Design Tool v1
+// ============================================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// === State ===
+let editorMode = false; // false = play, true = edit
+let showParams = false;
+let showTrajectory = false;
+let gridSize = 16;
+let zoom = 1;
+
+// === Level Data ===
+let levelObjects = [];
+let spawnPoint = { x: 100, y: 450 };
+let nextId = 1;
+
+// Default level
+function createDefaultLevel() {
+  levelObjects = [
+    { id: nextId++, type: 'ground', x: -600, y: 520, w: 3800, h: 80 },
+    { id: nextId++, type: 'platform', x: 120, y: 400, w: 100, h: 16 },
+    { id: nextId++, type: 'platform', x: 300, y: 320, w: 80, h: 16 },
+    { id: nextId++, type: 'platform', x: 460, y: 250, w: 100, h: 16 },
+    { id: nextId++, type: 'wall', x: 1100, y: 120, w: 24, h: 400 },
+    { id: nextId++, type: 'wall', x: 1260, y: 120, w: 24, h: 400 },
+    { id: nextId++, type: 'platform', x: 1100, y: 100, w: 184, h: 20 },
+    { id: nextId++, type: 'platform', x: 650, y: 420, w: 60, h: 16 },
+    { id: nextId++, type: 'platform', x: 800, y: 380, w: 60, h: 16 },
+    { id: nextId++, type: 'platform', x: 950, y: 340, w: 60, h: 16 },
+    { id: nextId++, type: 'hazard', x: 700, y: 505, w: 100, h: 15 },
+    { id: nextId++, type: 'hazard', x: 1150, y: 505, w: 80, h: 15 },
+    { id: nextId++, type: 'platform', x: 1380, y: 280, w: 200, h: 16 },
+    { id: nextId++, type: 'platform', x: 1600, y: 400, w: 100, h: 16 },
+    { id: nextId++, type: 'platform', x: 1780, y: 320, w: 100, h: 16 },
+    { id: nextId++, type: 'platform', x: 1950, y: 440, w: 70, h: 16 },
+    { id: nextId++, type: 'platform', x: 2100, y: 370, w: 70, h: 16 },
+    { id: nextId++, type: 'platform', x: 2250, y: 300, w: 70, h: 16 },
+  ];
+  spawnPoint = { x: 100, y: 450 };
+}
+createDefaultLevel();
+
+// === Undo/Redo ===
+const undoStack = [];
+const redoStack = [];
+function saveState() {
+  undoStack.push(JSON.stringify({ objects: levelObjects, spawn: spawnPoint, nextId }));
+  if (undoStack.length > 100) undoStack.shift();
+  redoStack.length = 0;
+}
+function undo() {
+  if (undoStack.length === 0) return;
+  redoStack.push(JSON.stringify({ objects: levelObjects, spawn: spawnPoint, nextId }));
+  const state = JSON.parse(undoStack.pop());
+  levelObjects = state.objects;
+  spawnPoint = state.spawn;
+  nextId = state.nextId;
+  selectedObj = null;
+  rebuildColliders();
+}
+function redo() {
+  if (redoStack.length === 0) return;
+  undoStack.push(JSON.stringify({ objects: levelObjects, spawn: spawnPoint, nextId }));
+  const state = JSON.parse(redoStack.pop());
+  levelObjects = state.objects;
+  spawnPoint = state.spawn;
+  nextId = state.nextId;
+  selectedObj = null;
+  rebuildColliders();
+}
+
+// === Editor state ===
+let currentTool = 'select';
+let selectedObj = null;
+let dragState = null; // { type: 'place'|'move'|'resize', ... }
+let mouse = { x: 0, y: 0, worldX: 0, worldY: 0, down: false, button: 0 };
+let editorCamVx = 0, editorCamVy = 0;
+
+// === Physics Params (HK defaults) ===
+const P = {
+  moveSpd: 200, airControl: 1.0,
+  jumpSpd: 580, gravity: 1800, maxFall: 480, jumpCut: 0.35,
+  coyoteTime: 70, jumpBuffer: 80, riseGravMul: 0.85, fallGravMul: 1.4,
+  dashSpd: 500, dashDur: 210, dashCd: 600, dashIframe: 210, dashGrav: 0,
+  wallSlideSpd: 72, wallJumpX: 200, wallJumpY: 540, wallJumpLock: 170,
+  camSpdX: 4.5, camSpdY: 3.5, camDeadX: 30, camDeadY: 15, camOffY: 40,
+};
+
+// === Init UI Params ===
+function initParams() {
+  for (const key of Object.keys(P)) {
+    const el = document.getElementById('p_' + key);
+    if (!el) continue;
+    el.value = P[key];
+    el.nextElementSibling.textContent = P[key];
+    el.addEventListener('input', () => {
+      P[key] = parseFloat(el.value);
+      el.nextElementSibling.textContent = el.value;
+    });
+  }
+}
+initParams();
+
+// === Canvas resize ===
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// === Input ===
+const keys = {};
+const justPressed = {};
+const justReleased = {};
+window.addEventListener('keydown', e => {
+  // Don't capture when typing in inputs
+  if (e.target.tagName === 'INPUT') return;
+  if (!keys[e.code]) justPressed[e.code] = true;
+  keys[e.code] = true;
+
+  // Shortcuts
+  if (e.code === 'Tab') { e.preventDefault(); toggleMode(); }
+  if (e.code === 'KeyH') { toggleHelp(); }
+  if (e.code === 'KeyG' && editorMode) { cycleGrid(); }
+  if (e.code === 'KeyT' && editorMode) { showTrajectory = !showTrajectory; updateTrajectoryBtn(); }
+  if (e.code === 'Delete' && editorMode && selectedObj) { deleteSelected(); }
+  if (e.ctrlKey && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+  if (e.ctrlKey && e.code === 'KeyS') { e.preventDefault(); saveLevel(); }
+
+  // Number keys for tools
+  if (editorMode) {
+    const toolMap = { 'Digit1': 'select', 'Digit2': 'platform', 'Digit3': 'wall',
+      'Digit4': 'ground', 'Digit5': 'oneway', 'Digit6': 'hazard', 'Digit7': 'spawn' };
+    if (toolMap[e.code]) selectTool(toolMap[e.code]);
+  }
+
+  if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => {
+  if (e.target.tagName === 'INPUT') return;
+  keys[e.code] = false;
+  justReleased[e.code] = true;
+});
+function clearFrameInput() {
+  for (const k in justPressed) justPressed[k] = false;
+  for (const k in justReleased) justReleased[k] = false;
+}
+
+// === Mouse ===
+canvas.addEventListener('mousemove', e => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+  updateWorldMouse();
+  if (editorMode && dragState) handleDrag();
+});
+canvas.addEventListener('mousedown', e => {
+  e.preventDefault();
+  mouse.down = true;
+  mouse.button = e.button;
+  if (editorMode) handleMouseDown(e);
+});
+canvas.addEventListener('mouseup', e => {
+  mouse.down = false;
+  if (editorMode) handleMouseUp(e);
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => {
+  if (editorMode) {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+      zoom = Math.max(0.25, Math.min(4, zoom * zoomFactor));
+    } else {
+      cam.x += e.deltaX * 0.5 / zoom;
+      cam.y += e.deltaY * 0.5 / zoom;
+    }
+  }
+}, { passive: false });
+
+// Drag & drop level files
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.json')) loadFile(file);
+});
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+function updateWorldMouse() {
+  mouse.worldX = (mouse.x - canvas.width / 2) / zoom + cam.x + canvas.width / 2;
+  mouse.worldY = (mouse.y - canvas.height / 2) / zoom + cam.y + canvas.height / 2;
+}
+
+function snapToGrid(v) {
+  if (gridSize <= 0) return v;
+  return Math.round(v / gridSize) * gridSize;
+}
+
+// === Camera ===
+const cam = { x: 0, y: 0, shake: 0, lookOffsetY: 0, lookTimer: 0, lastGroundY: 520, landingSnap: false };
+
+// === Player ===
+const player = {
+  x: 100, y: 450, w: 18, h: 38,
+  vx: 0, vy: 0,
+  onGround: false, facingRight: true,
+  touchingWallDir: 0, wallSliding: false, wallJumpLockTimer: 0,
+  groundTimer: 0, jumpBufferTimer: 0, hasJumped: false, jumpHeld: false,
+  dashing: false, dashTimer: 0, dashDir: 1, dashCdTimer: 0,
+  invincible: false, canDashInAir: true,
+  hp: 5, maxHp: 5, hurtInvincTimer: 0, hurtKnockTimer: 0,
+  state: '대기', prevVy: 0,
+  walkCycle: 0, squash: 1, stretch: 1,
+  eyeBlink: 0, blinkTimer: 2,
+};
+
+function resetPlayer() {
+  player.x = spawnPoint.x; player.y = spawnPoint.y;
+  player.vx = 0; player.vy = 0;
+  player.hp = player.maxHp;
+  player.dashing = false; player.dashTimer = 0;
+  player.wallSliding = false; player.wallJumpLockTimer = 0;
+  player.hurtInvincTimer = 0; player.hurtKnockTimer = 0;
+  player.canDashInAir = true;
+}
+
+// === Collider cache ===
+let platforms = [];
+let hazardsList = [];
+function rebuildColliders() {
+  platforms = levelObjects.filter(o => o.type !== 'hazard');
+  hazardsList = levelObjects.filter(o => o.type === 'hazard');
+  document.getElementById('obj-count').textContent = `오브젝트: ${levelObjects.length}`;
+}
+rebuildColliders();
+
+// === Particles & Ghosts ===
+const particles = [];
+const ghosts = [];
+function emit(x, y, count, color, vxR, vyR, life, sizeR) {
+  for (let i = 0; i < count; i++) {
+    particles.push({ x, y,
+      vx: vxR[0] + Math.random() * (vxR[1] - vxR[0]),
+      vy: vyR[0] + Math.random() * (vyR[1] - vyR[0]),
+      life: life * (0.5 + Math.random() * 0.5), maxLife: life, color,
+      size: sizeR ? sizeR[0] + Math.random() * (sizeR[1] - sizeR[0]) : 2
+    });
+  }
+}
+
+// === Background ===
+const bgBuildings = [];
+for (let i = -800; i < 3400; i += 60 + Math.random() * 80) {
+  bgBuildings.push({ x: i, w: 40 + Math.random() * 70, h: 100 + Math.random() * 200, shade: 0.03 + Math.random() * 0.04 });
+}
+
+// === Mode toggle ===
+function toggleMode() {
+  editorMode = !editorMode;
+  const badge = document.getElementById('mode-badge');
+  const palette = document.getElementById('palette');
+  const inspector = document.getElementById('inspector');
+
+  if (editorMode) {
+    badge.className = 'mode-badge mode-edit';
+    badge.textContent = '✏️ EDIT';
+    palette.style.display = 'block';
+    inspector.style.display = 'block';
+    if (showParams) document.getElementById('params-panel').style.display = 'block';
+  } else {
+    badge.className = 'mode-badge mode-play';
+    badge.textContent = '▶ PLAY';
+    palette.style.display = 'none';
+    inspector.style.display = 'none';
+    // Reset player to spawn
+    resetPlayer();
+    rebuildColliders();
+  }
+}
+
+function toggleHelp() {
+  const h = document.getElementById('help-overlay');
+  h.style.display = h.style.display === 'none' ? 'block' : 'none';
+}
+
+function cycleGrid() {
+  const sizes = [0, 8, 16, 32];
+  const idx = sizes.indexOf(gridSize);
+  gridSize = sizes[(idx + 1) % sizes.length];
+  document.querySelectorAll('.grid-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.grid) === gridSize);
+  });
+}
+
+// === Tool selection ===
+function selectTool(tool) {
+  currentTool = tool;
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
+    b.classList.toggle('selected', b.dataset.tool === tool);
+  });
+  if (tool !== 'select') selectedObj = null;
+}
+
+// === Editor mouse handlers ===
+function handleMouseDown(e) {
+  updateWorldMouse();
+  const wx = mouse.worldX, wy = mouse.worldY;
+
+  if (e.button === 2) {
+    // Right click → delete object under cursor
+    const obj = getObjectAt(wx, wy);
+    if (obj) {
+      saveState();
+      levelObjects = levelObjects.filter(o => o.id !== obj.id);
+      if (selectedObj && selectedObj.id === obj.id) selectedObj = null;
+      rebuildColliders();
+    }
+    return;
+  }
+
+  if (currentTool === 'select') {
+    const obj = getObjectAt(wx, wy);
+    if (obj) {
+      selectedObj = obj;
+      // Check if near edge for resize
+      const handle = getResizeHandle(obj, wx, wy);
+      if (handle) {
+        dragState = { type: 'resize', obj, handle, startX: wx, startY: wy,
+          origX: obj.x, origY: obj.y, origW: obj.w, origH: obj.h };
+      } else {
+        dragState = { type: 'move', obj, offsetX: wx - obj.x, offsetY: wy - obj.y };
+      }
+      saveState();
+      updateInspector();
+    } else {
+      selectedObj = null;
+      updateInspector();
+    }
+  } else if (currentTool === 'spawn') {
+    saveState();
+    spawnPoint.x = snapToGrid(wx);
+    spawnPoint.y = snapToGrid(wy);
+  } else if (currentTool === 'erase') {
+    const obj = getObjectAt(wx, wy);
+    if (obj) {
+      saveState();
+      levelObjects = levelObjects.filter(o => o.id !== obj.id);
+      rebuildColliders();
+    }
+  } else {
+    // Placement tools
+    const sx = snapToGrid(wx);
+    const sy = snapToGrid(wy);
+    dragState = { type: 'place', tool: currentTool, startX: sx, startY: sy, endX: sx, endY: sy };
+    saveState();
+  }
+}
+
+function handleDrag() {
+  if (!dragState) return;
+  const wx = mouse.worldX, wy = mouse.worldY;
+
+  if (dragState.type === 'place') {
+    dragState.endX = snapToGrid(wx);
+    dragState.endY = snapToGrid(wy);
+  } else if (dragState.type === 'move') {
+    dragState.obj.x = snapToGrid(wx - dragState.offsetX);
+    dragState.obj.y = snapToGrid(wy - dragState.offsetY);
+    updateInspector();
+  } else if (dragState.type === 'resize') {
+    const dx = wx - dragState.startX;
+    const dy = wy - dragState.startY;
+    const h = dragState.handle;
+    const o = dragState;
+
+    if (h.includes('e')) { dragState.obj.w = Math.max(8, snapToGrid(o.origW + dx)); }
+    if (h.includes('w')) { dragState.obj.x = snapToGrid(o.origX + dx); dragState.obj.w = Math.max(8, snapToGrid(o.origW - dx)); }
+    if (h.includes('s')) { dragState.obj.h = Math.max(8, snapToGrid(o.origH + dy)); }
+    if (h.includes('n')) { dragState.obj.y = snapToGrid(o.origY + dy); dragState.obj.h = Math.max(8, snapToGrid(o.origH - dy)); }
+    updateInspector();
+  }
+}
+
+function handleMouseUp(e) {
+  if (dragState && dragState.type === 'place') {
+    let x1 = Math.min(dragState.startX, dragState.endX);
+    let y1 = Math.min(dragState.startY, dragState.endY);
+    let x2 = Math.max(dragState.startX, dragState.endX);
+    let y2 = Math.max(dragState.startY, dragState.endY);
+    let w = x2 - x1;
+    let h = y2 - y1;
+
+    // Min size
+    const minSizes = { platform: [32, 16], wall: [16, 32], ground: [64, 32], hazard: [16, 8], oneway: [32, 8] };
+    const mins = minSizes[dragState.tool] || [16, 16];
+    if (w < mins[0]) w = mins[0];
+    if (h < mins[1]) h = mins[1];
+
+    levelObjects.push({
+      id: nextId++, type: dragState.tool,
+      x: x1, y: y1, w, h
+    });
+    rebuildColliders();
+  }
+  dragState = null;
+}
+
+function getObjectAt(wx, wy) {
+  // Reverse order (top-most first)
+  for (let i = levelObjects.length - 1; i >= 0; i--) {
+    const o = levelObjects[i];
+    if (wx >= o.x && wx <= o.x + o.w && wy >= o.y && wy <= o.y + o.h) return o;
+  }
+  return null;
+}
+
+function getResizeHandle(obj, wx, wy) {
+  const m = 6 / zoom; // handle margin
+  let h = '';
+  if (wy < obj.y + m) h += 'n';
+  if (wy > obj.y + obj.h - m) h += 's';
+  if (wx < obj.x + m) h += 'w';
+  if (wx > obj.x + obj.w - m) h += 'e';
+  return h || null;
+}
+
+function deleteSelected() {
+  if (!selectedObj) return;
+  saveState();
+  levelObjects = levelObjects.filter(o => o.id !== selectedObj.id);
+  selectedObj = null;
+  rebuildColliders();
+  updateInspector();
+}
+
+// === Inspector ===
+function updateInspector() {
+  const el = document.getElementById('insp-content');
+  if (!selectedObj) {
+    el.innerHTML = '<span style="color:#555">오브젝트를 선택하세요</span>';
+    return;
+  }
+  const o = selectedObj;
+  const typeNames = { platform: '플랫폼', wall: '벽', ground: '지면', hazard: '가시', oneway: '원웨이' };
+  el.innerHTML = `
+    <div style="color:#e0b040;margin-bottom:6px;">${typeNames[o.type] || o.type} #${o.id}</div>
+    <div class="field"><label>X:</label><input id="insp-x" type="number" value="${o.x}" step="${gridSize||1}"></div>
+    <div class="field"><label>Y:</label><input id="insp-y" type="number" value="${o.y}" step="${gridSize||1}"></div>
+    <div class="field"><label>W:</label><input id="insp-w" type="number" value="${o.w}" step="${gridSize||1}" min="8"></div>
+    <div class="field"><label>H:</label><input id="insp-h" type="number" value="${o.h}" step="${gridSize||1}" min="8"></div>
+    <button onclick="deleteSelected()" style="margin-top:8px;padding:4px 10px;background:#3a1a1a;color:#f88;border:1px solid #5a2a2a;border-radius:3px;cursor:pointer;font-size:11px;">🗑️ 삭제</button>
+  `;
+  ['x','y','w','h'].forEach(prop => {
+    document.getElementById('insp-' + prop).addEventListener('input', e => {
+      saveState();
+      selectedObj[prop] = parseInt(e.target.value) || 0;
+      rebuildColliders();
+    });
+  });
+}
+
+// === Save / Load ===
+function saveLevel() {
+  const data = { version: 1, params: { ...P }, spawn: spawnPoint, objects: levelObjects };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `윤회_무명_level_${Date.now()}.json`;
+  a.click();
+}
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.objects) {
+        saveState();
+        levelObjects = data.objects;
+        nextId = Math.max(...levelObjects.map(o => o.id), 0) + 1;
+        if (data.spawn) spawnPoint = data.spawn;
+        if (data.params) Object.assign(P, data.params);
+        rebuildColliders();
+        initParams(); // re-sync sliders
+      }
+    } catch(err) { console.error('Load error:', err); }
+  };
+  reader.readAsText(file);
+}
+function copyToClipboard() {
+  const data = { version: 1, params: { ...P }, spawn: spawnPoint, objects: levelObjects };
+  navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
+    const btn = document.getElementById('btn-clipboard');
+    btn.textContent = '✅ 복사됨!';
+    setTimeout(() => btn.textContent = '📋 복사', 1500);
+  });
+}
+
+// === Button bindings ===
+document.getElementById('btn-mode').addEventListener('click', toggleMode);
+document.getElementById('btn-params').addEventListener('click', () => {
+  showParams = !showParams;
+  document.getElementById('params-panel').style.display = showParams ? 'block' : 'none';
+  document.getElementById('btn-params').classList.toggle('active', showParams);
+});
+document.getElementById('btn-save').addEventListener('click', saveLevel);
+document.getElementById('btn-load').addEventListener('click', () => document.getElementById('file-input').click());
+document.getElementById('btn-clipboard').addEventListener('click', copyToClipboard);
+document.getElementById('btn-help').addEventListener('click', toggleHelp);
+
+document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
+  b.addEventListener('click', () => selectTool(b.dataset.tool));
+});
+document.querySelectorAll('.grid-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    gridSize = parseInt(b.dataset.grid);
+    document.querySelectorAll('.grid-btn').forEach(x => x.classList.toggle('active', x === b));
+  });
+});
+document.getElementById('btn-trajectory').addEventListener('click', () => {
+  showTrajectory = !showTrajectory;
+  updateTrajectoryBtn();
+});
+function updateTrajectoryBtn() {
+  document.getElementById('btn-trajectory').classList.toggle('selected', showTrajectory);
+}
+
+// ===================================================================
+// PHYSICS (same as v2, condensed)
+// ===================================================================
+function rectOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function resolveCollisions() {
+  player.onGround = false;
+  player.touchingWallDir = 0;
+  const pb = { x: player.x, y: player.y, w: player.w, h: player.h };
+
+  for (const p of platforms) {
+    if (!rectOverlap(pb, p)) continue;
+    const oL = (pb.x + pb.w) - p.x, oR = (p.x + p.w) - pb.x;
+    const oT = (pb.y + pb.h) - p.y, oB = (p.y + p.h) - pb.y;
+
+    // One-way: only resolve top collision if falling
+    if (p.type === 'oneway') {
+      if (player.vy >= 0 && oT < 12 && oT < oB && oT < oL && oT < oR) {
+        player.y = p.y - player.h;
+        if (player.prevVy > 200) {
+          const intensity = Math.min(player.prevVy / 600, 1);
+          cam.shake = intensity * 2;
+          player.squash = 1 + intensity * 0.3; player.stretch = 1 - intensity * 0.15;
+          emit(player.x + player.w/2, player.y + player.h, 3, '#888', [-30,30], [-20,-3], 0.2);
+        }
+        player.vy = 0;
+        player.onGround = true;
+        cam.lastGroundY = player.y + player.h;
+        cam.landingSnap = true;
+      }
+      continue;
+    }
+
+    const min = Math.min(oL, oR, oT, oB);
+    if (min === oT && player.vy >= 0) {
+      player.y = p.y - player.h;
+      if (player.prevVy > 200) {
+        const intensity = Math.min(player.prevVy / 600, 1);
+        cam.shake = intensity * 2;
+        player.squash = 1 + intensity * 0.3; player.stretch = 1 - intensity * 0.15;
+        emit(player.x + player.w/2, player.y + player.h, 3 + Math.floor(intensity * 3), '#888', [-30,30], [-20,-3], 0.2);
+      }
+      player.vy = 0; player.onGround = true;
+      cam.lastGroundY = player.y + player.h; cam.landingSnap = true;
+    } else if (min === oB && player.vy <= 0) {
+      player.y = p.y + p.h; player.vy = 0;
+    } else if (min === oL) {
+      player.x = p.x - player.w; player.touchingWallDir = 1; if (player.vx > 0) player.vx = 0;
+    } else if (min === oR) {
+      player.x = p.x + p.w; player.touchingWallDir = -1; if (player.vx < 0) player.vx = 0;
+    }
+  }
+}
+
+let gameTime = 0;
+function updatePlayer(dt) {
+  if (dt > 0.05) dt = 0.05;
+  gameTime += dt;
+
+  const inL = keys['ArrowLeft'] || keys['KeyA'];
+  const inR = keys['ArrowRight'] || keys['KeyD'];
+  const inJump = keys['Space'];
+  const inDash = justPressed['KeyZ'] || justPressed['ShiftLeft'] || justPressed['ShiftRight'];
+  const inputDir = (inR ? 1 : 0) - (inL ? 1 : 0);
+
+  // Timers
+  player.wallJumpLockTimer = Math.max(0, player.wallJumpLockTimer - dt * 1000);
+  player.dashCdTimer = Math.max(0, player.dashCdTimer - dt * 1000);
+  player.hurtInvincTimer = Math.max(0, player.hurtInvincTimer - dt * 1000);
+  player.hurtKnockTimer = Math.max(0, player.hurtKnockTimer - dt * 1000);
+  player.squash += (1 - player.squash) * Math.min(1, dt * 12);
+  player.stretch += (1 - player.stretch) * Math.min(1, dt * 12);
+  player.blinkTimer -= dt;
+  if (player.blinkTimer <= 0) { player.eyeBlink = player.eyeBlink ? 0 : 1; player.blinkTimer = player.eyeBlink ? 0.1 : 2 + Math.random() * 3; }
+
+  if (player.onGround) { player.groundTimer = P.coyoteTime; player.hasJumped = false; player.canDashInAir = true; }
+  else { player.groundTimer = Math.max(0, player.groundTimer - dt * 1000); }
+
+  if (justPressed['Space']) player.jumpBufferTimer = P.jumpBuffer;
+  player.jumpBufferTimer = Math.max(0, player.jumpBufferTimer - dt * 1000);
+
+  // Hurt knockback
+  if (player.hurtKnockTimer > 0) {
+    player.vy += P.gravity * dt;
+    if (player.vy > P.maxFall) player.vy = P.maxFall;
+    player.prevVy = player.vy;
+    player.x += player.vx * dt; player.y += player.vy * dt;
+    resolveCollisions(); player.state = '피격'; return;
+  }
+
+  // Dash
+  if (player.dashing) {
+    player.dashTimer -= dt * 1000;
+    player.invincible = player.dashTimer > (P.dashDur - P.dashIframe);
+    if (player.dashTimer <= 0) {
+      player.dashing = false; player.invincible = false;
+      player.vx = player.dashDir * P.moveSpd * 0.5; player.vy = 0;
+    } else {
+      player.vx = player.dashDir * P.dashSpd;
+      player.vy *= P.dashGrav; player.vy += P.gravity * P.dashGrav * dt;
+      player.prevVy = player.vy;
+      player.x += player.vx * dt; player.y += player.vy * dt;
+      resolveCollisions();
+      if (ghosts.length === 0 || gameTime - ghosts[ghosts.length-1].t > 0.03)
+        ghosts.push({ x: player.x, y: player.y, w: player.w, h: player.h, t: gameTime, alpha: 0.6 });
+      emit(player.x + player.w/2 - player.dashDir*10, player.y + player.h*0.6, 1, '#fff', [-player.dashDir*20,-player.dashDir*60], [-10,10], 0.15);
+      player.state = player.invincible ? '대시(무적)' : '대시'; return;
+    }
+  }
+  if (inDash && player.dashCdTimer <= 0 && !player.dashing && (player.onGround || player.canDashInAir)) {
+    player.dashing = true; player.dashTimer = P.dashDur;
+    player.dashDir = player.facingRight ? 1 : -1;
+    player.dashCdTimer = P.dashCd; player.invincible = true; player.vy = 0;
+    if (!player.onGround) player.canDashInAir = false;
+    cam.shake = 1.5;
+    emit(player.x + player.w/2, player.y + player.h/2, 8, 'rgba(200,220,255,0.8)', [-50,50], [-30,30], 0.2);
+    player.squash = 0.7; player.stretch = 1.3; return;
+  }
+
+  // Wall slide
+  const canWS = !player.onGround && player.touchingWallDir !== 0 && player.vy > 0;
+  const pressWall = (player.touchingWallDir === 1 && inR) || (player.touchingWallDir === -1 && inL);
+  player.wallSliding = canWS && pressWall;
+
+  // Wall jump
+  if (player.wallSliding && player.jumpBufferTimer > 0 && !player.hasJumped) {
+    player.vy = -P.wallJumpY; player.vx = -player.touchingWallDir * P.wallJumpX;
+    player.facingRight = player.touchingWallDir < 0;
+    player.wallJumpLockTimer = P.wallJumpLock; player.jumpBufferTimer = 0;
+    player.hasJumped = true; player.wallSliding = false; cam.shake = 1.5;
+    player.squash = 0.8; player.stretch = 1.2;
+    const wx = player.touchingWallDir === 1 ? player.x + player.w : player.x;
+    emit(wx, player.y + player.h/2, 5, '#ddd', [player.touchingWallDir*-15, player.touchingWallDir*-50], [-30,10], 0.2);
+  }
+  // Normal jump
+  else if (player.jumpBufferTimer > 0 && player.groundTimer > 0 && !player.hasJumped) {
+    player.vy = -P.jumpSpd; player.jumpBufferTimer = 0; player.groundTimer = 0;
+    player.hasJumped = true; player.squash = 0.75; player.stretch = 1.25;
+    emit(player.x + player.w/2, player.y + player.h, 3, '#aaa', [-20,20], [-12,-2], 0.2);
+  }
+
+  // Jump cut
+  if (!inJump && player.vy < 0 && player.hasJumped) {
+    player.vy *= P.jumpCut; player.hasJumped = false;
+  }
+
+  // Horizontal
+  if (player.wallJumpLockTimer <= 0) {
+    if (inputDir !== 0) {
+      player.vx = inputDir * P.moveSpd * (player.onGround ? 1 : P.airControl);
+      player.facingRight = inputDir > 0;
+    } else { player.vx = 0; }
+  }
+
+  if (player.onGround && Math.abs(player.vx) > 10) player.walkCycle += Math.abs(player.vx) * dt * 0.04;
+  else player.walkCycle = 0;
+
+  // Gravity
+  if (player.wallSliding) {
+    player.vy = Math.min(player.vy + P.gravity * 0.2 * dt, P.wallSlideSpd);
+    if (Math.random() < 0.2) {
+      const wx = player.touchingWallDir === 1 ? player.x + player.w : player.x;
+      emit(wx, player.y + Math.random()*player.h, 1, '#666', [-6*player.touchingWallDir,-12*player.touchingWallDir], [3,10], 0.12);
+    }
+  } else {
+    const gm = player.vy < 0 ? P.riseGravMul : P.fallGravMul;
+    player.vy += P.gravity * gm * dt;
+    if (player.vy > P.maxFall) player.vy = P.maxFall;
+  }
+
+  player.prevVy = player.vy;
+  player.x += player.vx * dt; player.y += player.vy * dt;
+  resolveCollisions();
+
+  // Hazards
+  if (!player.invincible && player.hurtInvincTimer <= 0) {
+    const pb = { x: player.x, y: player.y, w: player.w, h: player.h };
+    for (const h of hazardsList) {
+      if (rectOverlap(pb, h)) {
+        player.hp--; player.hurtInvincTimer = 1000; player.hurtKnockTimer = 200;
+        const dir = player.x + player.w/2 < h.x + h.w/2 ? -1 : 1;
+        player.vx = dir * 150; player.vy = -180;
+        cam.shake = 3; player.squash = 1.3; player.stretch = 0.7;
+        emit(player.x + player.w/2, player.y + player.h/2, 10, '#f55', [-60,60], [-60,20], 0.3);
+        if (player.hp <= 0) resetPlayer();
+        break;
+      }
+    }
+  }
+  if (player.y > 900) resetPlayer();
+
+  // State
+  if (player.wallSliding) player.state = '벽타기';
+  else if (player.wallJumpLockTimer > 0) player.state = '벽점프';
+  else if (!player.onGround && player.vy < 0) player.state = '점프';
+  else if (!player.onGround) player.state = '낙하';
+  else if (Math.abs(player.vx) > 10) player.state = '이동';
+  else player.state = '대기';
+
+  // Particles / ghosts
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 60*dt; p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  for (let i = ghosts.length - 1; i >= 0; i--) {
+    ghosts[i].alpha -= dt * 3; if (ghosts[i].alpha <= 0) ghosts.splice(i, 1);
+  }
+}
+
+// === Camera ===
+function updateCamera(dt) {
+  if (editorMode) {
+    // Free camera in edit mode
+    const spd = 400 / zoom;
+    if (keys['KeyW'] || keys['ArrowUp']) cam.y -= spd * dt;
+    if (keys['KeyS'] || keys['ArrowDown']) cam.y += spd * dt;
+    if (keys['KeyA'] || keys['ArrowLeft']) cam.x -= spd * dt;
+    if (keys['KeyD'] || keys['ArrowRight']) cam.x += spd * dt;
+    cam.shake *= Math.pow(0.02, dt);
+    return;
+  }
+
+  const W = canvas.width, H = canvas.height;
+  const px = player.x + player.w/2, py = player.y + player.h/2;
+  let targetX = cam.x;
+  const dxFromCam = px - (targetX + W/2);
+  if (Math.abs(dxFromCam) > P.camDeadX) targetX = px - W/2 - Math.sign(dxFromCam) * P.camDeadX;
+  const lookX = (player.facingRight ? 1 : -1) * 60;
+  targetX += lookX * dt * 2;
+  cam.x += (targetX - cam.x) * Math.min(1, P.camSpdX * dt);
+
+  let targetY;
+  const groundFocusY = cam.lastGroundY - H/2 + P.camOffY;
+  if (player.onGround) targetY = groundFocusY;
+  else { const dyg = py - cam.lastGroundY; targetY = dyg < -50 ? py - H/2 + P.camOffY : groundFocusY; }
+  const dycy = (targetY + H/2) - (cam.y + H/2);
+  if (Math.abs(dycy) < P.camDeadY) targetY = cam.y;
+
+  const inDown = keys['ArrowDown'] || keys['KeyS'];
+  const inUp = (keys['ArrowUp'] || keys['KeyW']) && !(keys['ArrowLeft']||keys['KeyA']||keys['ArrowRight']||keys['KeyD']);
+  if (inDown && player.onGround) { cam.lookTimer += dt*1000; if (cam.lookTimer > 800) cam.lookOffsetY += (200 - cam.lookOffsetY)*Math.min(1,dt*3); }
+  else if (inUp && player.onGround) { cam.lookTimer += dt*1000; if (cam.lookTimer > 800) cam.lookOffsetY += (-180 - cam.lookOffsetY)*Math.min(1,dt*3); }
+  else { cam.lookTimer = 0; cam.lookOffsetY += (0 - cam.lookOffsetY)*Math.min(1,dt*5); }
+  targetY += cam.lookOffsetY;
+
+  const ySpd = cam.landingSnap ? 12 : P.camSpdY;
+  cam.y += (targetY - cam.y) * Math.min(1, ySpd * dt);
+  if (cam.landingSnap && Math.abs(targetY - cam.y) < 2) cam.landingSnap = false;
+  cam.shake *= Math.pow(0.02, dt); if (cam.shake < 0.05) cam.shake = 0;
+}
+
+// ===================================================================
+// DRAW
+// ===================================================================
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const shakeX = cam.shake * (Math.random() - 0.5) * 2;
+  const shakeY = cam.shake * (Math.random() - 0.5) * 2;
+
+  ctx.save();
+  // Zoom from center
+  ctx.translate(W/2, H/2);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-W/2, -H/2);
+  ctx.translate(-cam.x + shakeX, -cam.y + shakeY);
+
+  // === Background ===
+  const parallax = 0.3;
+  for (const b of bgBuildings) {
+    ctx.fillStyle = `rgba(140,160,200,${b.shade})`;
+    const bx = b.x + cam.x * (1 - parallax) * 0.3;
+    ctx.fillRect(bx, 520 - b.h, b.w, b.h);
+  }
+
+  // === Grid (edit mode) ===
+  if (editorMode && gridSize > 0) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 0.5 / zoom;
+    const startX = Math.floor((cam.x) / gridSize) * gridSize;
+    const startY = Math.floor((cam.y) / gridSize) * gridSize;
+    const endX = cam.x + W / zoom + gridSize;
+    const endY = cam.y + H / zoom + gridSize;
+    for (let gx = startX; gx < endX; gx += gridSize) {
+      ctx.beginPath(); ctx.moveTo(gx, startY); ctx.lineTo(gx, endY); ctx.stroke();
+    }
+    for (let gy = startY; gy < endY; gy += gridSize) {
+      ctx.beginPath(); ctx.moveTo(startX, gy); ctx.lineTo(endX, gy); ctx.stroke();
+    }
+  }
+
+  // === Level objects ===
+  const typeColors = {
+    ground: ['#1a1a2a', '#2a2a40'],
+    platform: ['#222238', '#333350'],
+    wall: ['#1e1e30', '#2a2a44'],
+    hazard: ['#3a1a1a', '#5a2a2a'],
+    oneway: ['#1a2a1a', '#3a5a3a'],
+  };
+  for (const o of levelObjects) {
+    const colors = typeColors[o.type] || ['#222', '#444'];
+
+    if (o.type === 'hazard') {
+      const pulse = 0.5 + 0.3 * Math.sin(gameTime * 4);
+      ctx.fillStyle = `rgba(220,50,50,${pulse * 0.4})`;
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.fillStyle = `rgba(220,60,60,${0.6 + pulse * 0.3})`;
+      for (let sx = o.x; sx < o.x + o.w; sx += 8) {
+        ctx.beginPath(); ctx.moveTo(sx, o.y); ctx.lineTo(sx+4, o.y-8); ctx.lineTo(sx+8, o.y); ctx.fill();
+      }
+    } else if (o.type === 'oneway') {
+      ctx.fillStyle = colors[0];
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+      // Dashed top line
+      ctx.strokeStyle = '#6a6';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x + o.w, o.y); ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.fillStyle = colors[0];
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.fillStyle = colors[1];
+      ctx.fillRect(o.x, o.y, o.w, 3);
+      if (o.type === 'wall') {
+        ctx.fillStyle = '#181828';
+        ctx.fillRect(o.x, o.y, 2, o.h);
+        ctx.fillRect(o.x + o.w - 2, o.y, 2, o.h);
+      }
+    }
+
+    // Selection highlight
+    if (editorMode && selectedObj && selectedObj.id === o.id) {
+      ctx.strokeStyle = '#e0b040';
+      ctx.lineWidth = 2 / zoom;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(o.x - 2, o.y - 2, o.w + 4, o.h + 4);
+      ctx.setLineDash([]);
+      // Resize handles
+      const hs = 5 / zoom;
+      ctx.fillStyle = '#e0b040';
+      const corners = [
+        [o.x - hs/2, o.y - hs/2], [o.x + o.w - hs/2, o.y - hs/2],
+        [o.x - hs/2, o.y + o.h - hs/2], [o.x + o.w - hs/2, o.y + o.h - hs/2]
+      ];
+      for (const [cx, cy] of corners) ctx.fillRect(cx, cy, hs, hs);
+    }
+  }
+
+  // === Placement preview ===
+  if (editorMode && dragState && dragState.type === 'place') {
+    const x1 = Math.min(dragState.startX, dragState.endX);
+    const y1 = Math.min(dragState.startY, dragState.endY);
+    const w = Math.max(Math.abs(dragState.endX - dragState.startX), 16);
+    const h = Math.max(Math.abs(dragState.endY - dragState.startY), 8);
+    ctx.fillStyle = 'rgba(224,176,64,0.2)';
+    ctx.fillRect(x1, y1, w, h);
+    ctx.strokeStyle = 'rgba(224,176,64,0.6)';
+    ctx.lineWidth = 1 / zoom;
+    ctx.strokeRect(x1, y1, w, h);
+    // Dimensions
+    ctx.fillStyle = '#e0b040';
+    ctx.font = `${10/zoom}px monospace`;
+    ctx.fillText(`${w}×${h}`, x1, y1 - 4/zoom);
+  }
+
+  // === Spawn point ===
+  ctx.fillStyle = 'rgba(80,255,80,0.3)';
+  ctx.fillRect(spawnPoint.x - 8, spawnPoint.y - 40, 16, 40);
+  ctx.fillStyle = '#4f4';
+  ctx.font = `${12/zoom}px sans-serif`;
+  ctx.fillText('🚩', spawnPoint.x - 6, spawnPoint.y - 42);
+
+  // === Jump trajectory overlay ===
+  if (editorMode && showTrajectory) {
+    drawTrajectory(mouse.worldX, mouse.worldY);
+  }
+
+  // === Ghosts ===
+  for (const g of ghosts) {
+    ctx.globalAlpha = g.alpha * 0.4;
+    ctx.fillStyle = '#8af';
+    ctx.fillRect(g.x, g.y, g.w, g.h);
+  }
+  ctx.globalAlpha = 1;
+
+  // === Particles ===
+  for (const p of particles) {
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (p.life/p.maxLife), 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // === Player ===
+  if (!editorMode) drawPlayerChar();
+
+  ctx.restore();
+
+  // === HUD (screen space) ===
+  if (!editorMode) drawHUD();
+
+  // === Status bar ===
+  document.getElementById('sb-pos').textContent = `마우스: ${Math.round(mouse.worldX)}, ${Math.round(mouse.worldY)}`;
+  document.getElementById('sb-grid').textContent = `그리드: ${gridSize || 'OFF'}`;
+  document.getElementById('sb-player').textContent = `플레이어: ${Math.round(player.x)}, ${Math.round(player.y)}`;
+  document.getElementById('sb-zoom').textContent = `줌: ${Math.round(zoom * 100)}%`;
+}
+
+function drawTrajectory(startX, startY) {
+  // Full jump arc
+  ctx.strokeStyle = 'rgba(100,200,255,0.4)';
+  ctx.lineWidth = 1.5 / zoom;
+  ctx.setLineDash([3/zoom, 3/zoom]);
+  ctx.beginPath();
+  let tx = startX, ty = startY, tvy = -P.jumpSpd;
+  ctx.moveTo(tx, ty);
+  const step = 1/60;
+  for (let i = 0; i < 180; i++) {
+    const gm = tvy < 0 ? P.riseGravMul : P.fallGravMul;
+    tvy += P.gravity * gm * step;
+    if (tvy > P.maxFall) tvy = P.maxFall;
+    tx += P.moveSpd * step;
+    ty += tvy * step;
+    ctx.lineTo(tx, ty);
+    if (ty > startY + 10) break;
+  }
+  ctx.stroke();
+
+  // Short hop
+  ctx.strokeStyle = 'rgba(255,200,100,0.3)';
+  ctx.beginPath();
+  tx = startX; ty = startY; tvy = -P.jumpSpd * P.jumpCut;
+  ctx.moveTo(tx, ty);
+  for (let i = 0; i < 180; i++) {
+    const gm = tvy < 0 ? P.riseGravMul : P.fallGravMul;
+    tvy += P.gravity * gm * step;
+    if (tvy > P.maxFall) tvy = P.maxFall;
+    tx += P.moveSpd * step;
+    ty += tvy * step;
+    ctx.lineTo(tx, ty);
+    if (ty > startY + 10) break;
+  }
+  ctx.stroke();
+
+  // Dash range line
+  ctx.strokeStyle = 'rgba(130,170,255,0.3)';
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(startX + P.dashSpd * (P.dashDur / 1000), startY);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+
+  // Labels
+  ctx.fillStyle = 'rgba(100,200,255,0.6)';
+  ctx.font = `${9/zoom}px monospace`;
+  ctx.fillText('풀점프', startX + 20/zoom, startY - 10/zoom);
+  ctx.fillStyle = 'rgba(255,200,100,0.5)';
+  ctx.fillText('숏점프', startX + 20/zoom, startY - 2/zoom);
+}
+
+function drawPlayerChar() {
+  const px = player.x, py = player.y;
+  const cx = px + player.w / 2;
+
+  if (player.hurtInvincTimer > 0 && Math.floor(gameTime * 15) % 2 === 0) ctx.globalAlpha = 0.3;
+  if (player.invincible && player.dashing) { ctx.shadowColor = 'rgba(130,170,255,0.8)'; ctx.shadowBlur = 12; }
+
+  ctx.save();
+  ctx.translate(cx, py + player.h);
+  ctx.scale(player.squash, player.stretch);
+  ctx.translate(-cx, -(py + player.h));
+
+  if (player.dashing) {
+    ctx.fillStyle = '#a0c8ff';
+    ctx.beginPath();
+    ctx.ellipse(cx, py + player.h * 0.65, player.w * 0.55, player.h * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    const fr = player.facingRight;
+    const bob = player.onGround && Math.abs(player.vx) > 10 ? Math.sin(player.walkCycle) * 1.5 : 0;
+
+    // Cloak
+    ctx.fillStyle = '#2a2a3e';
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, py + 14); ctx.lineTo(cx - 10, py + player.h - 2);
+    ctx.quadraticCurveTo(cx, py + player.h + 2, cx + 10, py + player.h - 2);
+    ctx.lineTo(cx + 8, py + 14); ctx.closePath(); ctx.fill();
+
+    // Head
+    ctx.fillStyle = '#dde4ee';
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, py + 16 + bob);
+    ctx.quadraticCurveTo(cx - 8, py + 4 + bob, cx - 2, py + 2 + bob);
+    ctx.quadraticCurveTo(cx, py + bob, cx + 2, py + 2 + bob);
+    ctx.quadraticCurveTo(cx + 8, py + 4 + bob, cx + 7, py + 16 + bob);
+    ctx.closePath(); ctx.fill();
+
+    // Horns
+    ctx.beginPath(); ctx.moveTo(cx-5,py+4+bob); ctx.quadraticCurveTo(cx-10,py-6+bob,cx-4,py-8+bob); ctx.lineTo(cx-3,py+2+bob); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx+5,py+4+bob); ctx.quadraticCurveTo(cx+10,py-6+bob,cx+4,py-8+bob); ctx.lineTo(cx+3,py+2+bob); ctx.closePath(); ctx.fill();
+
+    // Eyes
+    const eyeOff = fr ? 2 : -2;
+    if (!player.eyeBlink) {
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.ellipse(cx-3+eyeOff, py+10+bob, 2.5, 3, -0.15, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx+3+eyeOff, py+10+bob, 2.5, 3, 0.15, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Legs
+    ctx.fillStyle = '#1a1a2e';
+    if (player.onGround && Math.abs(player.vx) > 10) {
+      const lp = Math.sin(player.walkCycle) * 3;
+      ctx.fillRect(cx-4+lp, py+player.h-6, 3, 6);
+      ctx.fillRect(cx+1-lp, py+player.h-6, 3, 6);
+    } else {
+      ctx.fillRect(cx-4, py+player.h-5, 3, 5);
+      ctx.fillRect(cx+1, py+player.h-5, 3, 5);
+    }
+  }
+
+  ctx.restore();
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  const ms = 14;
+  for (let i = 0; i < player.maxHp; i++) {
+    const mx = 12 + i * (ms + 4), my = 50;
+    if (i < player.hp) {
+      ctx.fillStyle = '#eee';
+      ctx.beginPath(); ctx.arc(mx+ms/2, my+ms/2, ms/2, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.ellipse(mx+ms/2-2, my+ms/2, 1.5, 2, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(mx+ms/2+2, my+ms/2, 1.5, 2, 0, 0, Math.PI*2); ctx.fill();
+    } else {
+      ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(mx+ms/2, my+ms/2, ms/2, 0, Math.PI*2); ctx.stroke();
+    }
+  }
+  if (player.dashCdTimer > 0) {
+    const pct = 1 - player.dashCdTimer / P.dashCd;
+    ctx.fillStyle = '#1a1a2a'; ctx.fillRect(12, 72, 70, 4);
+    ctx.fillStyle = '#8af'; ctx.fillRect(12, 72, 70 * pct, 4);
+  }
+  // State
+  ctx.fillStyle = '#e0b040'; ctx.font = '11px monospace';
+  ctx.fillText(player.state, 12, 98);
+}
+
+// === Main loop ===
+let lastTime = performance.now();
+function gameLoop(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  if (!editorMode) {
+    updatePlayer(dt);
+  }
+  updateCamera(dt);
+  draw();
+  clearFrameInput();
+  requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
