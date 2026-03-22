@@ -346,9 +346,10 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
       <kbd>V</kbd> 피니셔 (기절한 적 옆에서)<br>
       <kbd>↑↓</kbd> 길게: 카메라<br>
       <kbd>I</kbd> 인벤토리<br>
-      <kbd>E</kbd> 아이템 줍기<br>
+      <kbd>E</kbd> / <kbd>X</kbd> 상자 열기<br>
       <kbd>1~4</kbd> 아이템 사용<br>
       <kbd>Q</kbd> 아이템 버리기<br>
+      아이템 자동 줍기 (자석)<br>
     </div>
     <div style="margin-top:8px;">
       <b>에디트 모드</b><br>
@@ -463,13 +464,13 @@ function createDefaultLevel() {
     { id: nextId++, type: 'platform', x: -384, y: 352, w: 32, h: 32 },
     { id: nextId++, type: 'enemy', x: 400, y: 490, w: 24, h: 28 },
     { id: nextId++, type: 'enemy', x: 1400, y: 250, w: 24, h: 28 },
-    // 아이템 배치
-    { id: nextId++, type: 'item', x: 200, y: 500, w: 16, h: 16, itemType: 'onigiri' },
-    { id: nextId++, type: 'item', x: 650, y: 400, w: 16, h: 16, itemType: 'drink' },
-    { id: nextId++, type: 'item', x: 1150, y: 480, w: 16, h: 16, itemType: 'onigiri' },
-    { id: nextId++, type: 'item', x: 1600, y: 380, w: 16, h: 16, itemType: 'ramen' },
-    { id: nextId++, type: 'item', x: 950, y: 320, w: 16, h: 16, itemType: 'iron' },
-    { id: nextId++, type: 'item', x: 1800, y: 300, w: 16, h: 16, itemType: 'tape' },
+    // 상자 배치 (때리거나 E키로 열면 아이템 쏟아짐)
+    { id: nextId++, type: 'item', x: 200, y: 496, w: 24, h: 24, itemType: 'onigiri' },
+    { id: nextId++, type: 'item', x: 640, y: 396, w: 24, h: 24, itemType: 'drink' },
+    { id: nextId++, type: 'item', x: 1150, y: 496, w: 24, h: 24, itemType: 'onigiri' },
+    { id: nextId++, type: 'item', x: 1590, y: 376, w: 24, h: 24, itemType: 'ramen' },
+    { id: nextId++, type: 'item', x: 940, y: 316, w: 24, h: 24, itemType: 'iron' },
+    { id: nextId++, type: 'item', x: 1790, y: 296, w: 24, h: 24, itemType: 'tape' },
   ];
   spawnPoint = { x: 100, y: 450 };
 }
@@ -747,18 +748,13 @@ function resetPlayer() {
 
 function dayReset() {
   // Day 리셋: 사망 시 → 같은 날 아침으로 되돌아감 (Day 증가 X)
-  // 인벤토리: 그날 아침 상태로 복구 (= 오늘 주운 아이템만 제거)
-  // → 프로토에서는 간단하게: 오늘 주운 아이템을 인벤에서 제거
-  for (let i = 0; i < inventory.length; i++) {
-    // todayPickedItems에 해당하는 아이템 타입과 매칭되면 제거
-    // 심플 구현: 전날 밤(= Day 시작 시) 인벤 상태를 dayStartInventory로 저장
-    // → 리셋 시 복원
-  }
+  // 인벤토리: Day 시작 상태로 복원
   restoreDayStartInventory();
-  // 필드 아이템 복구 (오늘 주운 것 리스폰)
+  // 상자 & 필드 아이템 복구 (오늘 부순 상자 리스폰)
   todayPickedItemIds = [];
+  fieldItems = []; // 루즈 아이템 전부 초기화
   resetPlayer();
-  rebuildFieldItems();
+  rebuildFieldItems(); // 상자도 여기서 리빌드됨
 }
 
 // Day 시작 시 인벤토리 스냅샷
@@ -775,15 +771,50 @@ function restoreDayStartInventory() {
 }
 
 function rebuildFieldItems() {
-  // levelObjects에서 item 타입만 추출 → 런타임 필드 아이템 생성
+  // levelObjects에서 item 타입(상자) → 런타임 상자 목록 생성
   const itemObjs = levelObjects.filter(o => o.type === 'item');
-  fieldItems = itemObjs.filter(o => !todayPickedItemIds.includes(o.id)).map(o => ({
+  crates = itemObjs.filter(o => !todayPickedItemIds.includes(o.id)).map(o => ({
     srcId: o.id,
-    x: o.x, y: o.y, w: o.w || 16, h: o.h || 16,
+    x: o.x, y: o.y, w: o.w || 24, h: o.h || 24,
     itemType: o.itemType || 'onigiri',
-    picked: false,
-    bobOffset: Math.random() * Math.PI * 2, // 둥실둥실 애니메이션용
+    broken: false,
+    hp: 1, // 1번 때리면 부서짐
+    shakeTimer: 0,
   }));
+  // 기존 드랍된 루즈 아이템은 유지 (사망 리셋 시에만 클리어)
+  fieldItems = fieldItems.filter(fi => !fi.picked);
+}
+
+// === Crates (상자) ===
+let crates = [];
+
+function spawnItemsFromCrate(crate) {
+  // 상자에서 아이템 톡톡 쏟아지기!
+  const item = ITEMS[crate.itemType];
+  if (!item) return;
+  const cx = crate.x + crate.w / 2;
+  const cy = crate.y + crate.h / 2;
+  // 1~2개 아이템 스폰 (랜덤)
+  const count = 1 + (Math.random() < 0.3 ? 1 : 0);
+  for (let i = 0; i < count; i++) {
+    fieldItems.push({
+      srcId: crate.srcId,
+      x: cx - 8, y: cy - 8, w: 16, h: 16,
+      itemType: crate.itemType,
+      picked: false,
+      bobOffset: Math.random() * Math.PI * 2,
+      // 물리 — 톡 튀어나오는 연출!
+      vx: (Math.random() - 0.5) * 120,
+      vy: -(120 + Math.random() * 80),
+      onGround: false,
+      magnetTimer: 0.5, // 0.5초 후부터 자석 줍기 활성
+      spawnTime: gameTime,
+    });
+  }
+  // 파괴 이펙트
+  emit(cx, cy, 12, '#c9a45c', [-60, 60], [-60, 20], 0.3, [2, 5]);
+  emit(cx, cy, 6, '#fff', [-30, 30], [-30, 10], 0.2, [1, 3]);
+  cam.shake = 2;
 }
 
 // === Collider cache ===
@@ -999,7 +1030,7 @@ function handleMouseUp(e) {
     // 아이템 타입이면 itemType 추가
     if (dragState.tool === 'item') {
       newObj.itemType = currentItemType;
-      newObj.w = 16; newObj.h = 16; // 아이템은 고정 크기
+      newObj.w = 24; newObj.h = 24; // 상자 크기
     }
     levelObjects.push(newObj);
     rebuildColliders();
@@ -1306,34 +1337,75 @@ function dropInventoryItem(slotIdx) {
   updateInventoryUI();
 }
 
-function pickupNearbyItem() {
-  // 가장 가까운 필드 아이템 찾기
-  let closest = null, closestDist = Infinity;
+function autoPickupItems(dt) {
+  // 마인크래프트 스타일 자동 줍기 — 자석처럼 빨려옴
   const px = player.x + player.w/2, py = player.y + player.h/2;
+  const magnetRange = 50; // 자석 감지 범위
+  const pickupRange = 14; // 실제 줍기 범위
+
   for (const fi of fieldItems) {
     if (fi.picked) continue;
-    const dx = (fi.x + fi.w/2) - px, dy = (fi.y + fi.h/2) - py;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    if (dist < 40 && dist < closestDist) { closest = fi; closestDist = dist; }
-  }
-  if (!closest) return;
+    // 스폰 직후 짧은 대기 (톡 튀어나오는 연출 보장)
+    if (fi.magnetTimer !== undefined && fi.magnetTimer > 0) continue;
 
-  // 빈 슬롯 찾기
-  const emptySlot = inventory.indexOf(null);
-  if (emptySlot >= 0) {
-    inventory[emptySlot] = closest.itemType;
-    closest.picked = true;
-    if (closest.srcId > 0) todayPickedItemIds.push(closest.srcId);
-    const item = ITEMS[closest.itemType];
-    floatingTexts.push({ x: closest.x + closest.w/2, y: closest.y - 10,
-      text: `${item.emoji} 획득!`, color: item.color, life: 1.0 });
-    emit(closest.x + closest.w/2, closest.y + closest.h/2, 8, item.color, [-30,30], [-30,10], 0.3, [1,3]);
-    if (inventoryOpen) updateInventoryUI();
-  } else {
-    // 인벤토리 풀 — 알림
-    floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
-      text: '📦 인벤토리 가득!', color: '#f88', life: 1.2 });
+    const fx = fi.x + fi.w/2, fy = fi.y + fi.h/2;
+    const dx = px - fx, dy = py - fy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    if (dist < magnetRange) {
+      // 자석 효과 — 플레이어 쪽으로 끌려감
+      const speed = 250 * (1 - dist / magnetRange) + 50;
+      const nx = dx / (dist || 1), ny = dy / (dist || 1);
+      fi.x += nx * speed * dt;
+      fi.y += ny * speed * dt;
+      fi.vx = 0; fi.vy = 0; // 물리 정지, 자석 모드
+
+      if (dist < pickupRange) {
+        // 줍기!
+        const emptySlot = inventory.indexOf(null);
+        if (emptySlot >= 0) {
+          inventory[emptySlot] = fi.itemType;
+          fi.picked = true;
+          if (fi.srcId > 0) todayPickedItemIds.push(fi.srcId);
+          const item = ITEMS[fi.itemType];
+          floatingTexts.push({ x: fi.x + fi.w/2, y: fi.y - 10,
+            text: `${item.emoji} ${item.name}`, color: item.color, life: 0.8 });
+          emit(fi.x + fi.w/2, fi.y + fi.h/2, 6, item.color, [-20,20], [-20,10], 0.2, [1,3]);
+          if (inventoryOpen) updateInventoryUI();
+        }
+        // 인벤 풀이면 그냥 둠 (줍지 않음)
+      }
+    }
   }
+}
+
+function updateFieldItemPhysics(dt) {
+  // 드랍된 아이템 물리 (톡톡 튀기)
+  for (const fi of fieldItems) {
+    if (fi.picked) continue;
+    // magnetTimer 카운트다운
+    if (fi.magnetTimer !== undefined && fi.magnetTimer > 0) fi.magnetTimer -= dt;
+    // 물리 적용
+    if (fi.vx !== undefined && !fi.onGround) {
+      fi.vy = (fi.vy || 0) + 600 * dt; // 중력
+      fi.x += (fi.vx || 0) * dt;
+      fi.y += (fi.vy || 0) * dt;
+      fi.vx *= 0.98; // 공기 저항
+      // 바닥 충돌 (platforms)
+      for (const p of platforms) {
+        if (fi.x + fi.w > p.x && fi.x < p.x + p.w &&
+            fi.y + fi.h > p.y && fi.y + fi.h < p.y + 12 && fi.vy > 0) {
+          fi.y = p.y - fi.h;
+          fi.vy = -fi.vy * 0.3; // 통통 바운스
+          if (Math.abs(fi.vy) < 20) { fi.vy = 0; fi.onGround = true; }
+          fi.vx *= 0.7;
+        }
+      }
+      if (fi.y > 900) fi.picked = true; // 화면 밖 제거
+    }
+  }
+  // picked 아이템 정리
+  fieldItems = fieldItems.filter(fi => !fi.picked);
 }
 
 function updateHungerState() {
@@ -1343,15 +1415,21 @@ function updateHungerState() {
   else player.hungerState = 'starving'; // 0%일 때만 기아
 }
 
-function getNearbyItem() {
-  // 근처 아이템 있는지 체크 (UI 표시용)
+function getNearbyCrate() {
+  // 근처 상자 체크 (E키 상호작용용)
   const px = player.x + player.w/2, py = player.y + player.h/2;
-  for (const fi of fieldItems) {
-    if (fi.picked) continue;
-    const dx = (fi.x + fi.w/2) - px, dy = (fi.y + fi.h/2) - py;
-    if (Math.sqrt(dx*dx + dy*dy) < 40) return fi;
+  for (const c of crates) {
+    if (c.broken) continue;
+    const dx = (c.x + c.w/2) - px, dy = (c.y + c.h/2) - py;
+    if (Math.sqrt(dx*dx + dy*dy) < 50) return c;
   }
   return null;
+}
+
+function breakCrate(crate) {
+  crate.broken = true;
+  spawnItemsFromCrate(crate);
+  if (crate.srcId > 0) todayPickedItemIds.push(crate.srcId);
 }
 
 // ===================================================================
@@ -1488,8 +1566,15 @@ function updatePlayer(dt) {
     player.squash = 0.6; player.stretch = 1.4; return;
   }
 
-  // === 아이템 줍기 (E키) ===
-  if (justPressed['KeyE'] && !inventoryOpen) pickupNearbyItem();
+  // === 상자 상호작용 (E키) ===
+  if (justPressed['KeyE'] && !inventoryOpen) {
+    const crate = getNearbyCrate();
+    if (crate) breakCrate(crate);
+  }
+
+  // === 자동 줍기 (마인크래프트 스타일) ===
+  autoPickupItems(dt);
+  updateFieldItemPhysics(dt);
 
   // === 허기 시스템 ===
   {
@@ -1693,6 +1778,16 @@ function updatePlayer(dt) {
           emit(e.x + e.w/2, e.y + e.h/2, 10, '#fff', [-60,60], [-60,10], 0.3, [1,3]);
           karma = Math.min(100, karma + P.karmaKill);
         }
+      }
+    }
+
+    // 상자 때려 부수기
+    for (const c of crates) {
+      if (c.broken) continue;
+      const cb = { x: c.x, y: c.y, w: c.w, h: c.h };
+      if (rectOverlap(atkBox, cb)) {
+        breakCrate(c);
+        hitAny = true;
       }
     }
 
@@ -2166,44 +2261,84 @@ function draw() {
     ctx.fillText(`${w}×${h}`, x1, y1 - 4/zoom);
   }
 
-  // === Field Items (필드 아이템) ===
+  // === Crates (상자) ===
+  if (!editorMode) {
+    for (const c of crates) {
+      if (c.broken) continue;
+      const cx = c.x + c.w/2, cy = c.y + c.h/2;
+      const shake = c.shakeTimer > 0 ? (Math.random() - 0.5) * 3 : 0;
+      // 상자 본체
+      ctx.fillStyle = '#6b4c2a';
+      ctx.fillRect(c.x + shake, c.y, c.w, c.h);
+      // 상자 테두리
+      ctx.strokeStyle = '#8b6b3a';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(c.x + shake, c.y, c.w, c.h);
+      // 십자 무늬
+      ctx.strokeStyle = '#4a3520';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(c.x + shake + c.w/2, c.y);
+      ctx.lineTo(c.x + shake + c.w/2, c.y + c.h);
+      ctx.moveTo(c.x + shake, cy);
+      ctx.lineTo(c.x + shake + c.w, cy);
+      ctx.stroke();
+      // E키 프롬프트 (가까울 때)
+      const px = player.x + player.w/2, py2 = player.y + player.h/2;
+      const dist = Math.sqrt((cx-px)**2 + (cy-py2)**2);
+      if (dist < 50) {
+        ctx.fillStyle = 'rgba(224,176,64,0.9)';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('E / X', cx, c.y - 6);
+        ctx.textAlign = 'left';
+      }
+    }
+  }
+
+  // === Field Items — 루즈 아이템 (바닥에 떨어진) ===
   if (!editorMode) {
     for (const fi of fieldItems) {
       if (fi.picked) continue;
       const item = ITEMS[fi.itemType];
       if (!item) continue;
-      const bob = Math.sin(gameTime * 2 + fi.bobOffset) * 3;
+      const bob = fi.onGround ? Math.sin(gameTime * 3 + fi.bobOffset) * 2 : 0;
       // 글로우 효과
-      ctx.globalAlpha = 0.3;
+      ctx.globalAlpha = 0.25;
       ctx.fillStyle = item.color;
       ctx.beginPath();
-      ctx.arc(fi.x + fi.w/2, fi.y + fi.h/2 + bob, 12, 0, Math.PI * 2);
+      ctx.arc(fi.x + fi.w/2, fi.y + fi.h/2 + bob, 10, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
       // 이모지
-      ctx.font = '14px sans-serif';
+      ctx.font = '13px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(item.emoji, fi.x + fi.w/2, fi.y + fi.h/2 + bob + 5);
       ctx.textAlign = 'left';
     }
   }
 
-  // === Editor item preview ===
+  // === Editor item/crate preview ===
   if (editorMode) {
     for (const o of levelObjects.filter(ob => ob.type === 'item')) {
       const item = ITEMS[o.itemType || 'onigiri'];
-      ctx.fillStyle = 'rgba(80,160,80,0.3)';
-      ctx.fillRect(o.x, o.y, o.w || 16, o.h || 16);
-      ctx.font = `${14/zoom}px sans-serif`;
-      ctx.fillText(item ? item.emoji : '?', o.x + 1, o.y + (o.h || 16) - 2);
-      // 아이템 이름 라벨
-      ctx.fillStyle = '#8f8'; ctx.font = `${8/zoom}px monospace`;
-      ctx.fillText(item ? item.name : '?', o.x, o.y - 4/zoom);
+      const ow = o.w || 24, oh = o.h || 24;
+      // 상자 모양
+      ctx.fillStyle = 'rgba(107,76,42,0.6)';
+      ctx.fillRect(o.x, o.y, ow, oh);
+      ctx.strokeStyle = '#8b6b3a'; ctx.lineWidth = 1/zoom;
+      ctx.strokeRect(o.x, o.y, ow, oh);
+      // 내용물 이모지
+      ctx.font = `${12/zoom}px sans-serif`;
+      ctx.fillText(item ? item.emoji : '?', o.x + 2, o.y + oh - 4);
+      // 라벨
+      ctx.fillStyle = '#c9a45c'; ctx.font = `${8/zoom}px monospace`;
+      ctx.fillText(item ? `📦${item.name}` : '?', o.x, o.y - 4/zoom);
 
       if (selectedObj && selectedObj.id === o.id) {
         ctx.strokeStyle = '#e0b040'; ctx.lineWidth = 2/zoom;
         ctx.setLineDash([4, 4]);
-        ctx.strokeRect(o.x - 2, o.y - 2, (o.w||16) + 4, (o.h||16) + 4);
+        ctx.strokeRect(o.x - 2, o.y - 2, ow + 4, oh + 4);
         ctx.setLineDash([]);
       }
     }
@@ -2632,16 +2767,10 @@ function drawHUD() {
   ctx.fillStyle = '#e0b040'; ctx.font = '11px monospace';
   ctx.fillText(player.state, 12, 118);
 
-  // === 아이템 줍기 프롬프트 ===
-  const nearItem = getNearbyItem();
-  if (nearItem) {
-    const item = ITEMS[nearItem.itemType];
-    ctx.fillStyle = 'rgba(10,10,20,0.7)';
-    ctx.fillRect(canvas.width/2 - 60, canvas.height - 60, 120, 28);
-    ctx.fillStyle = '#e0b040'; ctx.font = '12px "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`E: ${item.emoji} ${item.name}`, canvas.width/2, canvas.height - 42);
-    ctx.textAlign = 'left';
+  // === 인벤 풀 알림 ===
+  if (inventory.indexOf(null) < 0) {
+    ctx.fillStyle = 'rgba(255,80,80,0.6)'; ctx.font = '9px monospace';
+    ctx.fillText('📦 인벤 가득!', canvas.width - (inventory.length * 28 + 10), canvas.height - 48);
   }
 
   // === 인벤토리 미니 표시 (항상 표시) ===
