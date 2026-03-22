@@ -1462,7 +1462,8 @@ function updatePlayer(dt) {
           player.squash = 1.2; player.stretch = 0.8;
           cam.shake = 4;
           player.hitstopTimer = 80;
-          player.hurtInvincTimer = 300;
+          player.hurtInvincTimer = 600; // 패링 후 넉넉한 무적
+          player.invincible = true; // 즉시 무적 (같은 프레임 보호)
           // 패링 이펙트
           const mx = (player.x + player.w/2 + e.x + e.w/2) / 2;
           const my = (player.y + player.h/2 + e.y + e.h/2) / 2;
@@ -1479,7 +1480,7 @@ function updatePlayer(dt) {
               e.autoKarmaTimer = 500;
             }
           }
-          e.aiState = e.stunTimer > 0 ? 'patrol' : 'recovery';
+          e.aiState = 'recovery';
           e.aiTimer = P.enemyRecovery;
         } else {
           // 플레이어 피격
