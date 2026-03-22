@@ -1531,6 +1531,23 @@ function updatePlayer(dt) {
       eb.x = e.x; eb.y = e.y;
     }
 
+    // Contact damage (접촉 피해 — 공격 상태와 별개)
+    if (!player.invincible && player.hurtInvincTimer <= 0 && e.stunTimer <= 0 && e.hurtTimer <= 0) {
+      const pb = { x: player.x, y: player.y, w: player.w, h: player.h };
+      const eb2 = { x: e.x, y: e.y, w: e.w, h: e.h };
+      if (rectOverlap(pb, eb2)) {
+        player.hp -= 1;
+        player.hurtInvincTimer = 1000;
+        player.hurtKnockTimer = 200;
+        const dir = player.x + player.w/2 < e.x + e.w/2 ? -1 : 1;
+        player.vx = dir * 150; player.vy = -180;
+        cam.shake = 3;
+        player.squash = 1.3; player.stretch = 0.7;
+        emit(player.x + player.w/2, player.y + player.h/2, 10, '#f55', [-60,60], [-60,20], 0.3);
+        if (player.hp <= 0) resetPlayer();
+      }
+    }
+
     // Fall off screen
     if (e.y > 900) e.dead = true;
   }
