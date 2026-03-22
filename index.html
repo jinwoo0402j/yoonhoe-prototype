@@ -1193,6 +1193,7 @@ function updatePlayer(dt) {
   const canWS = !player.onGround && player.touchingWallDir !== 0 && player.vy > 0;
   const pressWall = (player.touchingWallDir === 1 && inR) || (player.touchingWallDir === -1 && inL);
   player.wallSliding = canWS && pressWall;
+  if (player.wallSliding) player.hasJumped = false; // 벽타기 중이면 점프 리셋
 
   // Wall jump
   if (player.wallSliding && player.jumpBufferTimer > 0 && !player.hasJumped) {
