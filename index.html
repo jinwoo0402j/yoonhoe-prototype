@@ -130,6 +130,9 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
   <button id="btn-save">💾 저장</button>
   <button id="btn-load">📂 불러오기</button>
   <button id="btn-browse">🌐 서버 레벨</button>
+  <button id="btn-prev" title="[ 키">◀</button>
+  <span id="level-name" style="color:#e0b040; font-size:11px; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">기본 레벨</span>
+  <button id="btn-next" title="] 키">▶</button>
   <button id="btn-clipboard">📋 복사</button>
   <button id="btn-help">❓ 도움말</button>
   <div style="flex:1"></div>
@@ -267,6 +270,7 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
     <div style="margin-top:8px;">
       <b>파일</b><br>
       <kbd>Ctrl+S</kbd> 저장 (다운로드)<br>
+      <kbd>[</kbd> <kbd>]</kbd> 이전/다음 레벨<br>
       드래그앤드롭 .json 불러오기<br>
     </div>
   </div>
@@ -431,6 +435,8 @@ window.addEventListener('keydown', e => {
   // Shortcuts
   if (e.code === 'Tab') { e.preventDefault(); toggleMode(); }
   if (e.code === 'KeyH') { toggleHelp(); }
+  if (e.code === 'BracketLeft') { navigateLevel(-1); }
+  if (e.code === 'BracketRight') { navigateLevel(1); }
   if (e.code === 'KeyG' && editorMode) { cycleGrid(); }
   if (e.code === 'KeyT' && editorMode) { showTrajectory = !showTrajectory; updateTrajectoryBtn(); }
   if (e.code === 'Delete' && editorMode && selectedObj) { deleteSelected(); }
@@ -800,6 +806,45 @@ function loadFile(file) {
 }
 // === Level Browser (GitHub API) ===
 const REPO_API = 'https://api.github.com/repos/jinwoo0402j/yoonhoe-prototype/contents/levels';
+let serverLevels = []; // [{name, url}]
+let currentLevelIndex = -1; // -1 = default/local
+
+async function fetchLevelList() {
+  try {
+    const res = await fetch(REPO_API);
+    if (!res.ok) return;
+    const files = await res.json();
+    serverLevels = files.filter(f => f.name.endsWith('.json')).map(f => ({
+      name: f.name.replace('.json', ''),
+      url: f.download_url
+    }));
+  } catch(e) { console.error('Level list fetch error:', e); }
+}
+
+function updateLevelName() {
+  const el = document.getElementById('level-name');
+  if (currentLevelIndex < 0 || serverLevels.length === 0) {
+    el.textContent = '기본 레벨';
+  } else {
+    el.textContent = `📄 ${serverLevels[currentLevelIndex].name}`;
+  }
+}
+
+async function navigateLevel(dir) {
+  if (serverLevels.length === 0) await fetchLevelList();
+  if (serverLevels.length === 0) return;
+
+  currentLevelIndex += dir;
+  if (currentLevelIndex >= serverLevels.length) currentLevelIndex = 0;
+  if (currentLevelIndex < 0) currentLevelIndex = serverLevels.length - 1;
+
+  const lv = serverLevels[currentLevelIndex];
+  await loadFromServer(lv.url, lv.name);
+  updateLevelName();
+}
+
+// Pre-fetch level list on load
+fetchLevelList();
 
 async function openLevelBrowser() {
   const overlay = document.getElementById('level-browser');
@@ -848,6 +893,10 @@ async function loadFromServer(url, name) {
       initParams();
       resetPlayer();
       document.getElementById('level-browser').style.display = 'none';
+      // Update level index
+      const idx = serverLevels.findIndex(l => l.name === name);
+      if (idx >= 0) currentLevelIndex = idx;
+      updateLevelName();
       // Flash notification
       const badge = document.getElementById('mode-badge');
       const orig = badge.textContent;
@@ -879,6 +928,8 @@ document.getElementById('btn-load').addEventListener('click', () => document.get
 document.getElementById('btn-clipboard').addEventListener('click', copyToClipboard);
 document.getElementById('btn-help').addEventListener('click', toggleHelp);
 document.getElementById('btn-browse').addEventListener('click', openLevelBrowser);
+document.getElementById('btn-prev').addEventListener('click', () => navigateLevel(-1));
+document.getElementById('btn-next').addEventListener('click', () => navigateLevel(1));
 document.getElementById('level-browser-close').addEventListener('click', () => {
   document.getElementById('level-browser').style.display = 'none';
 });
