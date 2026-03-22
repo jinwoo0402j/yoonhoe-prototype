@@ -216,6 +216,7 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
   <h2>🤺 패링 (공격 맞받아치기)</h2>
   <div class="param-row"><label>패링 넉백</label><input type="range" id="p_parryKnockback" min="50" max="400" step="10"><span class="val"></span></div>
   <div class="param-row"><label>패링 경직치</label><input type="range" id="p_parryStagger" min="10" max="60" step="5"><span class="val"></span></div>
+  <div class="param-row"><label>패링 유예(ms)</label><input type="range" id="p_parryGrace" min="50" max="500" step="10"><span class="val"></span></div>
   <h2>👾 적 AI</h2>
   <div class="param-row"><label>감지 범위</label><input type="range" id="p_enemyDetectRange" min="50" max="400" step="10"><span class="val"></span></div>
   <div class="param-row"><label>추적 속도</label><input type="range" id="p_enemyChaseSpd" min="40" max="250" step="10"><span class="val"></span></div>
@@ -431,7 +432,7 @@ const P = {
   jumpSpd: 580, gravity: 1800, maxFall: 480, jumpCut: 0.35,
   coyoteTime: 70, jumpBuffer: 80, riseGravMul: 0.85, fallGravMul: 1.4,
   rollSpd: 400, rollDur: 250, rollCd: 600, rollIframe: 220,
-  parryKnockback: 180, parryStagger: 30,
+  parryKnockback: 180, parryStagger: 30, parryGrace: 200,
   enemyDetectRange: 150, enemyChaseSpd: 100, enemyAtkRange: 35,
   enemyWindup: 300, enemyAtkDur: 150, enemyRecovery: 400, enemyAtkDmg: 1,
   karmaFinisher: 15, karmaEmbrace: -15, karmaKill: 5,
@@ -578,6 +579,7 @@ const player = {
   // Combat
   attacking: false, atkTimer: 0, atkDir: 'right', atkCdTimer: 0,
   atkCombo: 0, hitstopTimer: 0,
+  lastAtkTime: 0, // 마지막 공격 시작 시간 (패링 유예용)
 };
 
 function resetPlayer() {
@@ -1270,6 +1272,7 @@ function updatePlayer(dt) {
     player.attacking = true;
     player.atkTimer = P.atkDur;
     player.atkCdTimer = P.atkCd;
+    player.lastAtkTime = performance.now();
     // Direction
     const inUp = keys['ArrowUp'] || keys['KeyW'];
     const inDown = (keys['ArrowDown'] || keys['KeyS']) && !player.onGround;
@@ -1442,11 +1445,12 @@ function updatePlayer(dt) {
       const atkDir = e.facingRight ? 1 : -1;
       const atkBox = {
         x: e.facingRight ? e.x + e.w : e.x - P.enemyAtkRange,
-        y: e.y - 4, w: P.enemyAtkRange, h: e.h + 8
+        y: e.y - 8, w: P.enemyAtkRange, h: e.h + 16
       };
       const pb = { x: player.x, y: player.y, w: player.w, h: player.h };
       if (rectOverlap(atkBox, pb) && !player.invincible && player.hurtInvincTimer <= 0) {
-        if (player.attacking) {
+        const timeSinceAtk = performance.now() - player.lastAtkTime;
+        if (player.attacking || timeSinceAtk < P.parryGrace) {
           // ⚔️ 패링! 공격과 공격이 맞부딪힘!
           const pdir = player.x + player.w/2 < e.x + e.w/2 ? -1 : 1;
           player.vx = pdir * P.parryKnockback; player.vy = -60;
