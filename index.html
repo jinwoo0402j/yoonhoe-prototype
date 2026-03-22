@@ -210,6 +210,10 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
     <div class="tool-swatch" style="background:#2a1a2a;display:flex;align-items:center;justify-content:center;font-size:12px;">👾</div>
     적 (순찰)
   </div>
+  <div class="tool-btn" data-tool="shelter">
+    <div class="tool-swatch" style="background:#2a3a2a;display:flex;align-items:center;justify-content:center;font-size:12px;">🏠</div>
+    쉘터
+  </div>
   <div class="tool-btn" data-tool="item">
     <div class="tool-swatch" style="background:#1a2a1a;display:flex;align-items:center;justify-content:center;font-size:12px;">🍙</div>
     아이템
@@ -220,6 +224,13 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
     <div class="item-opt" data-item="ramen">🍜 컵라면</div>
     <div class="item-opt" data-item="iron">🔩 철근</div>
     <div class="item-opt" data-item="tape">📦 테이프</div>
+    <div class="item-opt" data-item="glass">🔷 유리</div>
+    <div class="item-opt" data-item="plank">🪵 판자</div>
+    <div class="item-opt" data-item="nail">📌 못</div>
+    <div class="item-opt" data-item="wood">🪵 나무</div>
+    <div class="item-opt" data-item="cloth">🧶 천</div>
+    <div class="item-opt" data-item="bandage">🩹 붕대</div>
+    <div class="item-opt" data-item="disinfect">💊 소독약</div>
   </div>
   <div class="tool-btn" data-tool="erase">
     <div class="tool-swatch" style="background:#2a1a1a;display:flex;align-items:center;justify-content:center;font-size:12px;">✕</div>
@@ -471,6 +482,16 @@ function createDefaultLevel() {
     { id: nextId++, type: 'item', x: 1590, y: 376, w: 24, h: 24, itemType: 'ramen' },
     { id: nextId++, type: 'item', x: 940, y: 316, w: 24, h: 24, itemType: 'iron' },
     { id: nextId++, type: 'item', x: 1790, y: 296, w: 24, h: 24, itemType: 'tape' },
+    // Step 4: 새 소재 상자
+    { id: nextId++, type: 'item', x: 300, y: 296, w: 24, h: 24, itemType: 'glass' },
+    { id: nextId++, type: 'item', x: 470, y: 226, w: 24, h: 24, itemType: 'plank' },
+    { id: nextId++, type: 'item', x: 820, y: 356, w: 24, h: 24, itemType: 'nail' },
+    { id: nextId++, type: 'item', x: 1400, y: 256, w: 24, h: 24, itemType: 'wood' },
+    { id: nextId++, type: 'item', x: 1620, y: 376, w: 24, h: 24, itemType: 'cloth' },
+    { id: nextId++, type: 'item', x: 2110, y: 346, w: 24, h: 24, itemType: 'bandage' },
+    { id: nextId++, type: 'item', x: 2260, y: 276, w: 24, h: 24, itemType: 'disinfect' },
+    // Step 4: 쉘터 (스폰 근처)
+    { id: nextId++, type: 'shelter', x: 40, y: 480, w: 60, h: 40 },
   ];
   spawnPoint = { x: 100, y: 450 };
 }
@@ -581,7 +602,7 @@ window.addEventListener('keydown', e => {
   // Number keys for tools
   if (editorMode) {
     const toolMap = { 'Digit1': 'select', 'Digit2': 'platform', 'Digit3': 'wall',
-      'Digit4': 'ground', 'Digit5': 'oneway', 'Digit6': 'hazard', 'Digit7': 'spawn', 'Digit8': 'enemy', 'Digit9': 'item' };
+      'Digit4': 'ground', 'Digit5': 'oneway', 'Digit6': 'hazard', 'Digit7': 'spawn', 'Digit8': 'enemy', 'Digit9': 'item', 'Digit0': 'shelter' };
     if (toolMap[e.code]) selectTool(toolMap[e.code]);
   }
 
@@ -595,6 +616,33 @@ window.addEventListener('keydown', e => {
     const slotMap = { 'Digit1': 0, 'Digit2': 1, 'Digit3': 2, 'Digit4': 3, 'Digit5': 4, 'Digit6': 5, 'Digit7': 6, 'Digit8': 7 };
     if (slotMap[e.code] !== undefined && slotMap[e.code] < inventory.length) { useInventoryItem(slotMap[e.code]); }
     if (e.code === 'KeyQ') { dropInventoryItem(selectedSlot >= 0 ? selectedSlot : 0); }
+  }
+  // 쉘터 메뉴 키 처리
+  if (inShelter && !editorMode) {
+    if (['ArrowUp','ArrowDown','KeyW','KeyS','Enter','Space','Escape','KeyI','KeyE'].includes(e.code)) e.preventDefault();
+    if (e.code === 'Escape' || e.code === 'KeyI' || e.code === 'KeyE') {
+      if (shelterInCraft) shelterInCraft = false;
+      else exitShelter();
+    }
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+      if (shelterInCraft) shelterCraftSelection = (shelterCraftSelection - 1 + RECIPES.length) % RECIPES.length;
+      else shelterMenuSelection = (shelterMenuSelection - 1 + 5) % 5;
+    }
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+      if (shelterInCraft) shelterCraftSelection = (shelterCraftSelection + 1) % RECIPES.length;
+      else shelterMenuSelection = (shelterMenuSelection + 1) % 5;
+    }
+    if (e.code === 'Enter' || e.code === 'Space') {
+      if (shelterInCraft) {
+        shelterCraft(shelterCraftSelection);
+      } else {
+        if (shelterMenuSelection === 0) { /* 인벤토리: 그냥 표시 중 */ }
+        else if (shelterMenuSelection === 1) shelterEat();
+        else if (shelterMenuSelection === 2) shelterRest();
+        else if (shelterMenuSelection === 3) { shelterInCraft = true; shelterCraftSelection = 0; }
+        else if (shelterMenuSelection === 4) shelterSleep();
+      }
+    }
   }
   if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX','KeyV','KeyI'].includes(e.code)) e.preventDefault();
 });
@@ -692,7 +740,30 @@ const ITEMS = {
   ramen: { name: '컵라면', emoji: '🍜', hungerRestore: 60, color: '#f88', desc: '뜨거운 컵라면' },
   iron: { name: '철근', emoji: '🔩', hungerRestore: 0, color: '#aaa', desc: '공사장 철근 (소재)' },
   tape: { name: '테이프', emoji: '📦', hungerRestore: 0, color: '#cc8', desc: '접착 테이프 (소재)' },
+  // 소재 (Step 4)
+  glass: { name: '유리', emoji: '🔷', hungerRestore: 0, color: '#8cf', desc: '유리 조각 (소재)' },
+  plank: { name: '판자', emoji: '🪵', hungerRestore: 0, color: '#a86', desc: '나무 판자 (소재)' },
+  nail: { name: '못', emoji: '📌', hungerRestore: 0, color: '#ccc', desc: '못 (소재)' },
+  wood: { name: '나무', emoji: '🪵', hungerRestore: 0, color: '#8b5', desc: '나뭇가지 (소재)' },
+  cloth: { name: '천', emoji: '🧶', hungerRestore: 0, color: '#c8a', desc: '천 조각 (소재)' },
+  bandage: { name: '붕대', emoji: '🩹', hungerRestore: 0, color: '#ffa', desc: '붕대 (소재)' },
+  disinfect: { name: '소독약', emoji: '💊', hungerRestore: 0, color: '#f8f', desc: '소독약 (소재)' },
+  // 제작 아이템 (크래프팅 결과물)
+  pipe: { name: '파이프', emoji: '🔧', hungerRestore: 0, color: '#aab', desc: '비살생 무기', isCrafted: true, weaponType: 'blunt' },
+  knife: { name: '간이 칼', emoji: '🔪', hungerRestore: 0, color: '#daa', desc: '살생 무기', isCrafted: true, weaponType: 'blade' },
+  shield: { name: '간이 방패', emoji: '🛡️', hungerRestore: 0, color: '#aa8', desc: '공격 1회 방어', isCrafted: true },
+  torch: { name: '횃불', emoji: '🔥', hungerRestore: 0, color: '#fa0', desc: '밤 시야 확보', isCrafted: true },
+  medkit: { name: '응급키트', emoji: '🩹', hungerRestore: 0, color: '#8f8', desc: 'HP +2 회복', isCrafted: true, hpRestore: 2 },
 };
+
+// === 제작 레시피 (RECIPES) ===
+const RECIPES = [
+  { id: 'pipe', name: '🔧 파이프', result: 'pipe', materials: { iron: 1, tape: 1 }, desc: '비살생 무기 — 기절시킴' },
+  { id: 'knife', name: '🔪 간이 칼', result: 'knife', materials: { glass: 1, tape: 1 }, desc: '살생 무기 — 즉시 처치' },
+  { id: 'shield', name: '🛡️ 간이 방패', result: 'shield', materials: { plank: 1, nail: 1 }, desc: '공격 1회 방어' },
+  { id: 'torch', name: '🔥 횃불', result: 'torch', materials: { wood: 1, cloth: 1 }, desc: '밤 시야 확보' },
+  { id: 'medkit', name: '🩹 응급키트', result: 'medkit', materials: { bandage: 1, disinfect: 1 }, desc: 'HP +2 회복' },
+];
 
 // === Inventory (인벤토리) ===
 let inventory = Array(4).fill(null); // P.invSlots로 동적 조절
@@ -724,6 +795,17 @@ let currentDay = 1;
 let deathFade = 0; // 0~1 페이드 애니메이션
 let respawning = false;
 let respawnTimer = 0;
+
+// === Shelter System (쉘터 시스템) ===
+let inShelter = false;
+let shelterMenuSelection = 0; // 0-4: 인벤/식사/휴식/제작/수면
+let shelterInCraft = false;   // 제작 서브메뉴 중
+let shelterCraftSelection = 0;
+let shelterAnimation = 0;     // fade-in 타이머
+let sleepFade = 0;            // 수면 페이드
+let sleepFading = false;
+let sleepTimer = 0;
+let sleepDayDone = false;     // Day 전환 완료 플래그
 
 // === Field Items ===
 let fieldItems = []; // 플레이 모드 런타임 아이템 목록
@@ -822,7 +904,7 @@ let platforms = [];
 let hazardsList = [];
 let enemies = [];
 function rebuildColliders() {
-  platforms = levelObjects.filter(o => o.type !== 'hazard' && o.type !== 'enemy' && o.type !== 'item');
+  platforms = levelObjects.filter(o => o.type !== 'hazard' && o.type !== 'enemy' && o.type !== 'item' && o.type !== 'shelter');
   hazardsList = levelObjects.filter(o => o.type === 'hazard');
   // Spawn enemies from level data
   const enemyObjs = levelObjects.filter(o => o.type === 'enemy');
@@ -900,6 +982,7 @@ function toggleMode() {
     inventory = Array(P.invSlots).fill(null);
     todayPickedItemIds = [];
     inventoryOpen = false;
+    inShelter = false; shelterInCraft = false; sleepFading = false; sleepFade = 0; sleepDayDone = false;
     updateInventoryUI();
     saveDayStartInventory();
   }
@@ -1021,7 +1104,7 @@ function handleMouseUp(e) {
     let h = y2 - y1;
 
     // Min size
-    const minSizes = { platform: [32, 16], wall: [16, 32], ground: [64, 32], hazard: [16, 8], oneway: [32, 8], enemy: [24, 24], item: [16, 16] };
+    const minSizes = { platform: [32, 16], wall: [16, 32], ground: [64, 32], hazard: [16, 8], oneway: [32, 8], enemy: [24, 24], item: [16, 16], shelter: [40, 30] };
     const mins = minSizes[dragState.tool] || [16, 16];
     if (w < mins[0]) w = mins[0];
     if (h < mins[1]) h = mins[1];
@@ -1317,6 +1400,18 @@ function useInventoryItem(slotIdx) {
     floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
       text: `${item.emoji} +${item.hungerRestore}%`, color: item.color, life: 1.2 });
     updateInventoryUI();
+  } else if (item.hpRestore) {
+    // 응급키트 등 HP 회복 아이템
+    if (player.hp >= player.maxHp) {
+      floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+        text: '이미 HP 만땅!', color: '#888', life: 0.8 });
+      return;
+    }
+    player.hp = Math.min(player.maxHp, player.hp + item.hpRestore);
+    inventory[slotIdx] = null;
+    floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+      text: `${item.emoji} HP +${item.hpRestore}`, color: item.color, life: 1.2 });
+    updateInventoryUI();
   }
 }
 
@@ -1430,6 +1525,295 @@ function breakCrate(crate) {
   crate.broken = true;
   spawnItemsFromCrate(crate);
   if (crate.srcId > 0) todayPickedItemIds.push(crate.srcId);
+}
+
+// ===================================================================
+// SHELTER SYSTEM (쉘터 시스템)
+// ===================================================================
+function getNearbyShelter() {
+  const px = player.x + player.w/2, py = player.y + player.h/2;
+  for (const o of levelObjects) {
+    if (o.type !== 'shelter') continue;
+    const scx = o.x + o.w/2, scy = o.y + o.h/2;
+    const dx = scx - px, dy = scy - py;
+    if (Math.sqrt(dx*dx + dy*dy) < 80) return o;
+  }
+  return null;
+}
+
+function enterShelter() {
+  inShelter = true;
+  shelterMenuSelection = 0;
+  shelterInCraft = false;
+  shelterCraftSelection = 0;
+  shelterAnimation = 0;
+  inventoryOpen = false;
+  updateInventoryUI();
+}
+
+function exitShelter() {
+  inShelter = false;
+  shelterInCraft = false;
+}
+
+function shelterEat() {
+  player.hunger = player.maxHunger;
+  updateHungerState();
+  floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+    text: '🍚 허기 완전 회복!', color: '#4f4', life: 1.5 });
+}
+
+function shelterRest() {
+  player.hp = player.maxHp;
+  floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+    text: '💤 HP 완전 회복!', color: '#8af', life: 1.5 });
+}
+
+function shelterSleep() {
+  if (sleepFading) return;
+  exitShelter();
+  sleepFading = true;
+  sleepTimer = 0;
+  sleepFade = 0;
+  sleepDayDone = false;
+}
+
+function shelterCraft(recipeIdx) {
+  const recipe = RECIPES[recipeIdx];
+  if (!recipe) return;
+  // 재료 확인
+  for (const [mat, qty] of Object.entries(recipe.materials)) {
+    let count = 0;
+    for (const slot of inventory) { if (slot === mat) count++; }
+    if (count < qty) {
+      floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+        text: '재료 부족!', color: '#f88', life: 1.0 });
+      return;
+    }
+  }
+  // 재료 소모
+  for (const [mat, qty] of Object.entries(recipe.materials)) {
+    let removed = 0;
+    for (let i = 0; i < inventory.length; i++) {
+      if (inventory[i] === mat && removed < qty) { inventory[i] = null; removed++; }
+    }
+  }
+  // 결과물 추가
+  const emptySlot = inventory.indexOf(null);
+  if (emptySlot >= 0) {
+    inventory[emptySlot] = recipe.result;
+    const item = ITEMS[recipe.result];
+    floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+      text: `${item.emoji} ${item.name} 제작!`, color: item.color, life: 1.5 });
+  } else {
+    // 인벤 풀 → 필드에 드랍
+    fieldItems.push({
+      srcId: -1, x: player.x, y: player.y, w: 16, h: 16,
+      itemType: recipe.result, picked: false, bobOffset: Math.random() * Math.PI * 2,
+    });
+    floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+      text: '인벤 가득 — 필드 드랍', color: '#f80', life: 1.2 });
+  }
+}
+
+function updateSleep(dt) {
+  if (!sleepFading) return false;
+  sleepTimer += dt;
+  // Phase 1: 페이드 인 (0~0.8초)
+  if (sleepTimer < 0.8) {
+    sleepFade = sleepTimer / 0.8;
+  }
+  // Phase 2: 완전 어두움 + Day 전환 (0.8~1.6초)
+  else if (sleepTimer < 1.6) {
+    sleepFade = 1;
+    if (sleepTimer >= 0.9) {
+      // 실제 Day 전환 (한 번만)
+      if (!sleepDayDone) {
+        sleepDayDone = true;
+        currentDay++;
+        saveDayStartInventory();
+        todayPickedItemIds = [];
+        fieldItems = [];
+        rebuildColliders(); // enemies & crates 리스폰
+        player.x = spawnPoint.x; player.y = spawnPoint.y;
+        player.vx = 0; player.vy = 0;
+        inShelter = false;
+        shelterInCraft = false;
+      }
+    }
+  }
+  // Phase 3: 페이드 아웃 (1.6~2.4초)
+  else if (sleepTimer < 2.4) {
+    sleepFade = 1 - (sleepTimer - 1.6) / 0.8;
+  }
+  else {
+    sleepFade = 0;
+    sleepFading = false;
+    sleepDayDone = false;
+  }
+  return true;
+}
+
+function drawShelterMenu() {
+  if (!inShelter && sleepFade <= 0) return;
+  const W = canvas.width, H = canvas.height;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  // 수면 페이드
+  if (sleepFade > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${sleepFade})`;
+    ctx.fillRect(0, 0, W, H);
+    if (sleepFade > 0.6 && sleepFading && sleepTimer > 0.9 && sleepTimer < 2.2) {
+      const ta = Math.min(1, (sleepFade - 0.6) * 2.5);
+      ctx.globalAlpha = ta;
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 22px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Day ${currentDay}`, W/2, H/2);
+      ctx.fillStyle = '#aaa';
+      ctx.font = '13px "Segoe UI", sans-serif';
+      ctx.fillText('새로운 하루가 시작된다...', W/2, H/2 + 28);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    return; // 수면 중엔 쉘터 메뉴 숨김
+  }
+
+  if (!inShelter) { ctx.restore(); return; }
+
+  // 메뉴 오버레이
+  shelterAnimation = Math.min(1, shelterAnimation + 0.08);
+  const alpha = shelterAnimation * 0.88;
+  ctx.fillStyle = `rgba(5,10,5,${alpha})`;
+  ctx.fillRect(0, 0, W, H);
+
+  const menuX = W/2 - 160, menuY = H/2 - 160;
+  const menuW = 320, menuH = 340;
+
+  // 패널
+  ctx.fillStyle = 'rgba(15,25,15,0.97)';
+  ctx.beginPath();
+  ctx.roundRect(menuX, menuY, menuW, menuH, 10);
+  ctx.fill();
+  ctx.strokeStyle = '#4a6a3a';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(menuX, menuY, menuW, menuH, 10);
+  ctx.stroke();
+
+  // 타이틀
+  ctx.fillStyle = '#c8e080';
+  ctx.font = 'bold 16px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🏠 쉘터', W/2, menuY + 30);
+
+  // 서브타이틀
+  ctx.fillStyle = '#556';
+  ctx.font = '10px monospace';
+  ctx.fillText('Esc/E/I: 나가기 | ↑↓: 선택 | Enter: 확인', W/2, menuY + 48);
+
+  if (!shelterInCraft) {
+    // 메인 메뉴 옵션들
+    const opts = [
+      '📦 인벤토리 관리',
+      '🍚 식사 (허기 완전 회복)',
+      '💤 휴식 (HP 완전 회복)',
+      '🔨 제작',
+      '🌙 수면 (다음 Day)',
+    ];
+    for (let i = 0; i < opts.length; i++) {
+      const oy = menuY + 68 + i * 38;
+      const selected = i === shelterMenuSelection;
+      if (selected) {
+        ctx.fillStyle = 'rgba(200,160,60,0.2)';
+        ctx.beginPath();
+        ctx.roundRect(menuX + 12, oy - 14, menuW - 24, 30, 5);
+        ctx.fill();
+        ctx.strokeStyle = '#e0b040';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(menuX + 12, oy - 14, menuW - 24, 30, 5);
+        ctx.stroke();
+      }
+      ctx.fillStyle = selected ? '#e0b040' : '#aab';
+      ctx.font = `${selected ? 'bold ' : ''}13px "Segoe UI", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(opts[i], W/2, oy + 6);
+    }
+  } else {
+    // 제작 서브메뉴
+    ctx.fillStyle = '#c8e080';
+    ctx.font = 'bold 13px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔨 제작 — 레시피', W/2, menuY + 68);
+    ctx.fillStyle = '#446';
+    ctx.font = '9px monospace';
+    ctx.fillText('Esc: 뒤로 | ↑↓: 선택 | Enter: 제작', W/2, menuY + 82);
+
+    for (let i = 0; i < RECIPES.length; i++) {
+      const r = RECIPES[i];
+      const oy = menuY + 98 + i * 40;
+      const selected = i === shelterCraftSelection;
+      // 재료 보유 여부 확인
+      let canCraft = true;
+      for (const [mat, qty] of Object.entries(r.materials)) {
+        let cnt = 0;
+        for (const sl of inventory) { if (sl === mat) cnt++; }
+        if (cnt < qty) canCraft = false;
+      }
+      if (selected) {
+        ctx.fillStyle = 'rgba(200,160,60,0.2)';
+        ctx.beginPath();
+        ctx.roundRect(menuX + 8, oy - 14, menuW - 16, 36, 5);
+        ctx.fill();
+        ctx.strokeStyle = canCraft ? '#e0b040' : '#844';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(menuX + 8, oy - 14, menuW - 16, 36, 5);
+        ctx.stroke();
+      }
+      ctx.fillStyle = selected ? (canCraft ? '#e0b040' : '#f88') : (canCraft ? '#8c8' : '#665');
+      ctx.font = `${selected ? 'bold ' : ''}12px "Segoe UI", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(r.name, W/2, oy);
+      // 재료 목록
+      const matStr = Object.entries(r.materials).map(([m, q]) => {
+        const it = ITEMS[m];
+        let cnt = 0;
+        for (const sl of inventory) { if (sl === m) cnt++; }
+        return `${it ? it.emoji : m}×${q}(${cnt}/${q})`;
+      }).join(' + ');
+      ctx.fillStyle = canCraft ? '#8a8' : '#644';
+      ctx.font = '9px monospace';
+      ctx.fillText(matStr + ' ' + (canCraft ? '✅' : '❌'), W/2, oy + 14);
+    }
+  }
+
+  // 현재 인벤토리 미니 표시
+  const invY2 = menuY + menuH - 46;
+  ctx.fillStyle = '#334';
+  ctx.fillRect(menuX + 12, invY2, menuW - 24, 34);
+  ctx.fillStyle = '#556';
+  ctx.font = '8px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('인벤:', menuX + 16, invY2 + 12);
+  for (let i = 0; i < inventory.length; i++) {
+    const sx = menuX + 44 + i * 26;
+    ctx.fillStyle = 'rgba(30,40,30,0.8)';
+    ctx.fillRect(sx, invY2 + 2, 22, 22);
+    ctx.strokeStyle = '#445';
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(sx, invY2 + 2, 22, 22);
+    if (inventory[i]) {
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(ITEMS[inventory[i]].emoji, sx + 11, invY2 + 18);
+    }
+  }
+  ctx.textAlign = 'left';
+  ctx.restore();
 }
 
 // ===================================================================
@@ -1568,8 +1952,14 @@ function updatePlayer(dt) {
 
   // === 상자 상호작용 (E키) ===
   if (justPressed['KeyE'] && !inventoryOpen) {
-    const crate = getNearbyCrate();
-    if (crate) breakCrate(crate);
+    // 쉘터 상호작용 우선
+    const shelter = getNearbyShelter();
+    if (shelter) {
+      enterShelter();
+    } else {
+      const crate = getNearbyCrate();
+      if (crate) breakCrate(crate);
+    }
   }
 
   // === 자동 줍기 (마인크래프트 스타일) ===
@@ -2193,6 +2583,7 @@ function draw() {
     oneway: ['#1a2a1a', '#3a5a3a'],
     enemy: ['#2a1020', '#4a2040'],
     item: ['#1a2a1a', '#3a5a3a'],
+    shelter: ['#2a3a2a', '#3a5a3a'],
   };
   for (const o of levelObjects) {
     const colors = typeColors[o.type] || ['#222', '#444'];
@@ -2259,6 +2650,63 @@ function draw() {
     ctx.fillStyle = '#e0b040';
     ctx.font = `${10/zoom}px monospace`;
     ctx.fillText(`${w}×${h}`, x1, y1 - 4/zoom);
+  }
+
+  // === Shelters (쉘터) — 플레이 모드 렌더링 ===
+  if (!editorMode) {
+    for (const o of levelObjects.filter(ob => ob.type === 'shelter')) {
+      // 따뜻한 색 사각형 + 글로우
+      const glow = 0.5 + 0.2 * Math.sin(gameTime * 2);
+      ctx.save();
+      ctx.shadowColor = `rgba(200,160,80,${glow})`;
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#3a4a2a';
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.shadowBlur = 0;
+      // 지붕 선
+      ctx.fillStyle = '#5a7a3a';
+      ctx.fillRect(o.x, o.y, o.w, 5);
+      // 문
+      ctx.fillStyle = '#2a2010';
+      ctx.fillRect(o.x + o.w/2 - 6, o.y + o.h - 14, 12, 14);
+      // 아이콘
+      ctx.font = `${Math.min(16, o.h * 0.4)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('🏠', o.x + o.w/2, o.y + o.h * 0.55);
+      ctx.textAlign = 'left';
+      // E키 프롬프트
+      const px2 = player.x + player.w/2, py2 = player.y + player.h/2;
+      const scx = o.x + o.w/2, scy = o.y + o.h/2;
+      const sdist = Math.sqrt((scx-px2)**2 + (scy-py2)**2);
+      if (sdist < 80) {
+        ctx.fillStyle = 'rgba(224,176,64,0.9)';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('E: 쉘터', scx, o.y - 6);
+        ctx.textAlign = 'left';
+      }
+      ctx.restore();
+    }
+  }
+
+  // === Editor shelter preview ===
+  if (editorMode) {
+    for (const o of levelObjects.filter(ob => ob.type === 'shelter')) {
+      ctx.fillStyle = 'rgba(58,90,42,0.5)';
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.strokeStyle = '#5a8a3a'; ctx.lineWidth = 1/zoom;
+      ctx.strokeRect(o.x, o.y, o.w, o.h);
+      ctx.font = `${12/zoom}px sans-serif`;
+      ctx.fillText('🏠', o.x + 2, o.y + o.h - 4);
+      ctx.fillStyle = '#8a8'; ctx.font = `${8/zoom}px monospace`;
+      ctx.fillText('쉘터', o.x, o.y - 4/zoom);
+      if (selectedObj && selectedObj.id === o.id) {
+        ctx.strokeStyle = '#e0b040'; ctx.lineWidth = 2/zoom;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(o.x - 2, o.y - 2, o.w + 4, o.h + 4);
+        ctx.setLineDash([]);
+      }
+    }
   }
 
   // === Crates (상자) ===
@@ -2595,6 +3043,9 @@ function draw() {
   // === Death overlay (사망 화면) ===
   if (!editorMode) drawDeathOverlay();
 
+  // === Shelter menu (쉘터 메뉴) ===
+  if (!editorMode) drawShelterMenu();
+
   // === Status bar ===
   document.getElementById('sb-pos').textContent = `마우스: ${Math.round(mouse.worldX)}, ${Math.round(mouse.worldY)}`;
   document.getElementById('sb-grid').textContent = `그리드: ${gridSize || 'OFF'}`;
@@ -2821,12 +3272,20 @@ function gameLoop(now) {
   lastTime = now;
 
   if (!editorMode) {
+    // 수면 페이드 처리
+    updateSleep(dt);
     // 사망 페이드 처리
     const dying = updateDeath(dt);
-    if (!dying) {
+    if (!dying && !inShelter && !sleepFading) {
       // 인벤토리 열려있으면 게임 시간 느리게
       const gameDt = inventoryOpen ? dt * 0.1 : dt;
       updatePlayer(gameDt);
+    } else if (!dying && inShelter) {
+      // 쉘터 안에서도 파티클/부유 텍스트 업데이트
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i]; ft.y -= 40 * dt; ft.life -= dt;
+        if (ft.life <= 0) floatingTexts.splice(i, 1);
+      }
     }
   }
   updateCamera(dt);
