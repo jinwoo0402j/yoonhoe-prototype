@@ -213,11 +213,9 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
   <div class="param-row"><label>구르기 시간(ms)</label><input type="range" id="p_rollDur" min="100" max="500" step="10"><span class="val"></span></div>
   <div class="param-row"><label>쿨타임(ms)</label><input type="range" id="p_rollCd" min="200" max="2000" step="50"><span class="val"></span></div>
   <div class="param-row"><label>무적(ms)</label><input type="range" id="p_rollIframe" min="50" max="500" step="10"><span class="val"></span></div>
-  <h2>🤺 패링</h2>
-  <div class="param-row"><label>패링 윈도우(ms)</label><input type="range" id="p_parryWindow" min="50" max="400" step="10"><span class="val"></span></div>
+  <h2>🤺 패링 (공격 맞받아치기)</h2>
   <div class="param-row"><label>패링 넉백</label><input type="range" id="p_parryKnockback" min="50" max="400" step="10"><span class="val"></span></div>
-  <div class="param-row"><label>적 경직(ms)</label><input type="range" id="p_parryStun" min="200" max="1500" step="50"><span class="val"></span></div>
-  <div class="param-row"><label>패링 쿨(ms)</label><input type="range" id="p_parryCd" min="100" max="1000" step="50"><span class="val"></span></div>
+  <div class="param-row"><label>적 경직(ms)</label><input type="range" id="p_parryStun" min="200" max="2000" step="50"><span class="val"></span></div>
   <h2>🧱 벽</h2>
   <div class="param-row"><label>벽타기 속도</label><input type="range" id="p_wallSlideSpd" min="20" max="200" step="5"><span class="val"></span></div>
   <div class="param-row"><label>벽점프 X</label><input type="range" id="p_wallJumpX" min="100" max="500" step="10"><span class="val"></span></div>
@@ -272,8 +270,7 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
       <kbd>← →</kbd> 이동<br>
       <kbd>Space</kbd> 점프<br>
       <kbd>Z</kbd> / <kbd>Shift</kbd> 구르기 (i-frame)<br>
-      <kbd>C</kbd> 패링 (타이밍!)<br>
-      <kbd>X</kbd> 공격 (방향 조합!)<br>
+      <kbd>X</kbd> 공격 (맞받아치면 패링!)<br>
       <kbd>↓+X</kbd> 아래베기 (포고!)<br>
       <kbd>↑+X</kbd> 위베기<br>
       <kbd>V</kbd> 피니셔 (기절한 적 옆에서)<br>
@@ -420,7 +417,7 @@ const P = {
   jumpSpd: 580, gravity: 1800, maxFall: 480, jumpCut: 0.35,
   coyoteTime: 70, jumpBuffer: 80, riseGravMul: 0.85, fallGravMul: 1.4,
   rollSpd: 400, rollDur: 250, rollCd: 600, rollIframe: 220,
-  parryWindow: 180, parryKnockback: 180, parryStun: 800, parryCd: 400,
+  parryKnockback: 180, parryStun: 800,
   wallSlideSpd: 72, wallJumpX: 200, wallJumpY: 540, wallJumpLock: 170,
   camSpdX: 4.5, camSpdY: 3.5, camDeadX: 30, camDeadY: 15, camOffY: 40,
   // Combat
@@ -479,7 +476,7 @@ window.addEventListener('keydown', e => {
     if (toolMap[e.code]) selectTool(toolMap[e.code]);
   }
 
-  if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX','KeyC','KeyV'].includes(e.code)) e.preventDefault();
+  if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX','KeyV'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => {
   if (e.target.tagName === 'INPUT') return;
@@ -1080,15 +1077,11 @@ function updatePlayer(dt) {
   const inR = keys['ArrowRight'] || keys['KeyD'];
   const inJump = keys['Space'];
   const inRoll = justPressed['KeyZ'] || justPressed['ShiftLeft'] || justPressed['ShiftRight'];
-  const inParry = justPressed['KeyC'];
   const inputDir = (inR ? 1 : 0) - (inL ? 1 : 0);
 
   // Timers
   player.wallJumpLockTimer = Math.max(0, player.wallJumpLockTimer - dt * 1000);
   player.rollCdTimer = Math.max(0, player.rollCdTimer - dt * 1000);
-  player.parryCdTimer = Math.max(0, player.parryCdTimer - dt * 1000);
-  if (player.parryTimer > 0) player.parryTimer = Math.max(0, player.parryTimer - dt * 1000);
-  if (player.parryTimer <= 0) { player.parrying = false; player.parrySuccess = false; }
   player.hurtInvincTimer = Math.max(0, player.hurtInvincTimer - dt * 1000);
   player.hurtKnockTimer = Math.max(0, player.hurtKnockTimer - dt * 1000);
   player.squash += (1 - player.squash) * Math.min(1, dt * 12);
@@ -1138,17 +1131,6 @@ function updatePlayer(dt) {
     cam.shake = 0.8;
     emit(player.x + player.w/2, player.y + player.h, 5, 'rgba(180,180,200,0.6)', [-30,30], [-15,5], 0.15);
     player.squash = 0.6; player.stretch = 1.4; return;
-  }
-
-  // Parry (패링) — C키, 타이밍 맞추면 양쪽 튕겨남
-  if (inParry && player.parryCdTimer <= 0 && !player.rolling && !player.parrying) {
-    player.parrying = true;
-    player.parryTimer = P.parryWindow;
-    player.parryCdTimer = P.parryCd;
-    player.parrySuccess = false;
-    cam.shake = 0.5;
-    // Parry stance flash
-    emit(player.x + player.w/2, player.y + player.h/2, 4, '#ffe080', [-20,20], [-20,20], 0.15, [2,4]);
   }
 
   // Finisher (피니셔) — V키, 기절한 적 옆에서 확인사살
@@ -1320,7 +1302,6 @@ function updatePlayer(dt) {
 
   // State
   if (player.rolling) player.state = player.invincible ? '구르기(무적)' : '구르기';
-  else if (player.parrying) player.state = '패링';
   else if (player.wallSliding) player.state = '벽타기';
   else if (player.wallJumpLockTimer > 0) player.state = '벽점프';
   else if (!player.onGround && player.vy < 0) player.state = '점프';
@@ -1384,19 +1365,20 @@ function updatePlayer(dt) {
     if (!player.invincible && player.hurtInvincTimer <= 0 && e.hurtTimer <= 0 && e.stunTimer <= 0) {
       const pb = { x: player.x, y: player.y, w: player.w, h: player.h };
       if (rectOverlap(pb, eb)) {
-        // Parry check!
-        if (player.parrying && !player.parrySuccess) {
+        // 패링 체크 — 플레이어가 공격 중일 때 적과 부딪히면 = 칼과 칼이 맞음!
+        if (player.attacking) {
           // 패링 성공! 양쪽 튕겨남 + 적 경직
-          player.parrySuccess = true;
           const pdir = player.x + player.w/2 < e.x + e.w/2 ? -1 : 1;
           player.vx = pdir * P.parryKnockback; player.vy = -60;
+          player.attacking = false; player.atkTimer = 0;
           e.vx = -pdir * P.parryKnockback;
           e.stunTimer = P.parryStun;
           e.squash = 1.4; e.stretch = 0.6;
           player.squash = 1.2; player.stretch = 0.8;
           cam.shake = 4;
           player.hitstopTimer = 80;
-          // 패링 이펙트 — 금빛 스파크
+          player.hurtInvincTimer = 300; // 패링 후 짧은 무적
+          // 패링 이펙트 — 금빛 스파크 (칼끼리 부딪힌 지점)
           const mx = (player.x + player.w/2 + e.x + e.w/2) / 2;
           const my = (player.y + player.h/2 + e.y + e.h/2) / 2;
           emit(mx, my, 12, '#ffe080', [-80,80], [-80,40], 0.25, [2,5]);
@@ -1819,15 +1801,6 @@ function drawPlayerChar() {
   ctx.scale(player.squash, player.stretch);
   ctx.translate(-cx, -(py + player.h));
 
-  // Parry stance glow
-  if (player.parrying) {
-    ctx.shadowColor = 'rgba(255,224,128,0.8)'; ctx.shadowBlur = 15;
-    ctx.fillStyle = 'rgba(255,224,128,0.15)';
-    ctx.beginPath();
-    ctx.arc(cx, py + player.h * 0.5, player.w * 1.2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
   if (player.rolling) {
     // Roll = 웅크린 모양 (구르는 공)
     ctx.fillStyle = '#ccd4e0';
@@ -1901,18 +1874,6 @@ function drawHUD() {
       ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(mx+ms/2, my+ms/2, ms/2, 0, Math.PI*2); ctx.stroke();
     }
-  }
-  // Parry indicator
-  if (player.parrying) {
-    ctx.fillStyle = '#ffe080';
-    ctx.font = 'bold 11px monospace';
-    ctx.fillText('🛡️ 패링!', 12, 88);
-  }
-  // Parry cooldown
-  if (player.parryCdTimer > 0) {
-    const pct = 1 - player.parryCdTimer / P.parryCd;
-    ctx.fillStyle = '#1a1a2a'; ctx.fillRect(12, 78, 70, 3);
-    ctx.fillStyle = '#ffe080'; ctx.fillRect(12, 78, 70 * pct, 3);
   }
   if (player.rollCdTimer > 0) {
     const pct = 1 - player.rollCdTimer / P.rollCd;
