@@ -299,6 +299,7 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
   <div class="param-row"><label>허기(전투)</label><input type="range" id="p_hungerCombatDrain" min="0.5" max="8" step="0.5"><span class="val"></span></div>
   <div class="param-row"><label>기아HP감소</label><input type="range" id="p_starvingHpDrain" min="0.1" max="3" step="0.1"><span class="val"></span></div>
   <div class="param-row"><label>HP회복(포만)</label><input type="range" id="p_hpRegenRate" min="0.1" max="2" step="0.1"><span class="val"></span></div>
+  <div class="param-row"><label>인벤 슬롯</label><input type="range" id="p_invSlots" min="2" max="8" step="1"><span class="val"></span></div>
   <h2>📷 카메라</h2>
   <div class="param-row"><label>추적 X</label><input type="range" id="p_camSpdX" min="1" max="15" step="0.5"><span class="val"></span></div>
   <div class="param-row"><label>추적 Y</label><input type="range" id="p_camSpdY" min="1" max="15" step="0.5"><span class="val"></span></div>
@@ -526,6 +527,7 @@ const P = {
   // Survival (생존)
   hungerIdleDrain: 0.3, hungerWalkDrain: 0.6, hungerRunDrain: 1.2,
   hungerCombatDrain: 2.0, starvingHpDrain: 0.5, hpRegenRate: 0.3,
+  invSlots: 4, // 인벤토리 슬롯 수
   // Combat
   atkDur: 150, atkCd: 300, atkRange: 36, atkWidth: 28, atkDmg: 1,
   atkKnockback: 200, pogoForce: 400, hitstopDur: 60,
@@ -587,10 +589,10 @@ window.addEventListener('keydown', e => {
     inventoryOpen = !inventoryOpen;
     updateInventoryUI();
   }
-  // 인벤토리 아이템 사용 (1~4) — 인벤토리 열린 상태
+  // 인벤토리 아이템 사용 (숫자키) — 인벤토리 열린 상태
   if (inventoryOpen && !editorMode) {
-    const slotMap = { 'Digit1': 0, 'Digit2': 1, 'Digit3': 2, 'Digit4': 3 };
-    if (slotMap[e.code] !== undefined) { useInventoryItem(slotMap[e.code]); }
+    const slotMap = { 'Digit1': 0, 'Digit2': 1, 'Digit3': 2, 'Digit4': 3, 'Digit5': 4, 'Digit6': 5, 'Digit7': 6, 'Digit8': 7 };
+    if (slotMap[e.code] !== undefined && slotMap[e.code] < inventory.length) { useInventoryItem(slotMap[e.code]); }
     if (e.code === 'KeyQ') { dropInventoryItem(selectedSlot >= 0 ? selectedSlot : 0); }
   }
   if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX','KeyV','KeyI'].includes(e.code)) e.preventDefault();
@@ -692,9 +694,29 @@ const ITEMS = {
 };
 
 // === Inventory (인벤토리) ===
-const inventory = [null, null, null, null]; // 4슬롯
+let inventory = Array(4).fill(null); // P.invSlots로 동적 조절
 let inventoryOpen = false;
 let selectedSlot = -1;
+
+function resizeInventory() {
+  const target = P.invSlots;
+  if (inventory.length === target) return;
+  if (target > inventory.length) {
+    while (inventory.length < target) inventory.push(null);
+  } else {
+    // 줄일 때 넘치는 아이템 드랍
+    while (inventory.length > target) {
+      const removed = inventory.pop();
+      if (removed) {
+        fieldItems.push({
+          srcId: -1, x: player.x, y: player.y, w: 16, h: 16,
+          itemType: removed, picked: false, bobOffset: Math.random() * Math.PI * 2,
+        });
+      }
+    }
+  }
+  if (selectedSlot >= inventory.length) selectedSlot = -1;
+}
 
 // === Day System ===
 let currentDay = 1;
@@ -724,15 +746,32 @@ function resetPlayer() {
 }
 
 function dayReset() {
-  // Day 리셋: 사망 시 호출
-  currentDay++;
-  // 인벤토리 오늘 주운 아이템 유지하지 않음 (전날 밤 제작 장비만 유지 → Step 4에서 구분)
-  // 프로토: 인벤토리 초기화
-  for (let i = 0; i < inventory.length; i++) inventory[i] = null;
+  // Day 리셋: 사망 시 → 같은 날 아침으로 되돌아감 (Day 증가 X)
+  // 인벤토리: 그날 아침 상태로 복구 (= 오늘 주운 아이템만 제거)
+  // → 프로토에서는 간단하게: 오늘 주운 아이템을 인벤에서 제거
+  for (let i = 0; i < inventory.length; i++) {
+    // todayPickedItems에 해당하는 아이템 타입과 매칭되면 제거
+    // 심플 구현: 전날 밤(= Day 시작 시) 인벤 상태를 dayStartInventory로 저장
+    // → 리셋 시 복원
+  }
+  restoreDayStartInventory();
   // 필드 아이템 복구 (오늘 주운 것 리스폰)
   todayPickedItemIds = [];
   resetPlayer();
   rebuildFieldItems();
+}
+
+// Day 시작 시 인벤토리 스냅샷
+let dayStartInventory = [];
+function saveDayStartInventory() {
+  dayStartInventory = inventory.map(x => x); // 얕은 복사
+}
+function restoreDayStartInventory() {
+  // Day 시작 상태로 복원
+  inventory = dayStartInventory.map(x => x);
+  // 슬롯 수 맞추기
+  while (inventory.length < P.invSlots) inventory.push(null);
+  while (inventory.length > P.invSlots) inventory.pop();
 }
 
 function rebuildFieldItems() {
@@ -827,10 +866,11 @@ function toggleMode() {
     // 생존 시스템 리셋
     player.hunger = player.maxHunger; player.hungerState = 'full';
     currentDay = 1; respawning = false; deathFade = 0;
-    for (let i = 0; i < inventory.length; i++) inventory[i] = null;
+    inventory = Array(P.invSlots).fill(null);
     todayPickedItemIds = [];
     inventoryOpen = false;
     updateInventoryUI();
+    saveDayStartInventory();
   }
 }
 
@@ -1208,6 +1248,7 @@ function updateInventoryUI() {
   const overlay = document.getElementById('inventory-overlay');
   overlay.style.display = inventoryOpen ? 'block' : 'none';
   if (!inventoryOpen) return;
+  resizeInventory(); // 슬롯 수 동적 반영
   const grid = document.getElementById('inv-grid');
   grid.innerHTML = '';
   for (let i = 0; i < inventory.length; i++) {
@@ -1298,8 +1339,8 @@ function pickupNearbyItem() {
 function updateHungerState() {
   if (player.hunger >= 75) player.hungerState = 'full';
   else if (player.hunger >= 50) player.hungerState = 'normal';
-  else if (player.hunger >= 25) player.hungerState = 'hungry';
-  else player.hungerState = 'starving';
+  else if (player.hunger > 0) player.hungerState = 'hungry';
+  else player.hungerState = 'starving'; // 0%일 때만 기아
 }
 
 function getNearbyItem() {
@@ -1542,12 +1583,12 @@ function updatePlayer(dt) {
     player.vy *= P.jumpCut; player.hasJumped = false;
   }
 
-  // Horizontal (공복/기아 → 이동속도 제한)
+  // Horizontal (공복 → 이동속도↓, 기아 → 더 느림)
   if (player.wallJumpLockTimer <= 0) {
     if (inputDir !== 0) {
       let spdMul = player.onGround ? 1 : P.airControl;
-      if (player.hungerState === 'hungry') spdMul *= 0.6; // 공복: 달리기 불가 (속도↓)
-      if (player.hungerState === 'starving') spdMul *= 0.45; // 기아: 더 느림
+      if (player.hunger < 25 && player.hunger > 0) spdMul *= 0.6; // 공복(25% 미만): 달리기 불가
+      if (player.hungerState === 'starving') spdMul *= 0.45; // 기아(0%): 더 느림
       player.vx = inputDir * P.moveSpd * spdMul;
       player.facingRight = inputDir > 0;
     } else { player.vx = 0; }
@@ -1954,10 +1995,10 @@ function drawDeathOverlay() {
     ctx.textAlign = 'center';
     ctx.fillText('사 망', W/2, H/2 - 20);
 
-    // Day 표시
+    // Day 표시 — 같은 날 아침으로
     ctx.fillStyle = '#e0b040';
-    ctx.font = '18px "Segoe UI", sans-serif';
-    ctx.fillText(`Day ${currentDay} → Day ${currentDay + 1}`, W/2, H/2 + 20);
+    ctx.font = '16px "Segoe UI", sans-serif';
+    ctx.fillText(`Day ${currentDay} — 아침으로 되돌아간다...`, W/2, H/2 + 20);
 
     ctx.textAlign = 'left';
     ctx.globalAlpha = 1;
@@ -2604,8 +2645,9 @@ function drawHUD() {
   }
 
   // === 인벤토리 미니 표시 (항상 표시) ===
-  const invX = canvas.width - 130, invY = canvas.height - 40;
-  for (let i = 0; i < 4; i++) {
+  const invSlotCount = inventory.length;
+  const invX = canvas.width - (invSlotCount * 28 + 10), invY = canvas.height - 40;
+  for (let i = 0; i < invSlotCount; i++) {
     const sx = invX + i * 28;
     ctx.fillStyle = 'rgba(26,26,46,0.7)';
     ctx.fillRect(sx, invY, 24, 24);
