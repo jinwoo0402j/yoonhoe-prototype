@@ -114,6 +114,42 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
   border: 1px solid #444; color: #ddd; font-size: 11px;
 }
 #help-overlay .col2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+
+/* === Inventory overlay === */
+#inventory-overlay {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background: rgba(10,10,20,0.93); border: 1px solid #2a2a3a; border-radius: 8px;
+  padding: 16px 20px; z-index: 180; color: #bbb; font-size: 12px;
+  display: none; min-width: 280px;
+}
+#inventory-overlay h3 { color: #e0b040; font-size: 14px; margin: 0 0 10px; }
+.inv-grid { display: flex; gap: 8px; justify-content: center; }
+.inv-slot {
+  width: 56px; height: 56px; background: #1a1a2e; border: 2px solid #333;
+  border-radius: 6px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; cursor: pointer; transition: all 0.15s; position: relative;
+}
+.inv-slot:hover { border-color: #e0b040; background: #252545; }
+.inv-slot.selected { border-color: #e0b040; box-shadow: 0 0 8px rgba(224,176,64,0.3); }
+.inv-slot .slot-num {
+  position: absolute; top: 2px; left: 4px; font-size: 9px; color: #555;
+}
+.inv-slot .slot-emoji { font-size: 22px; }
+.inv-slot .slot-name { font-size: 8px; color: #888; margin-top: 2px; }
+.inv-actions { margin-top: 10px; text-align: center; font-size: 10px; color: #666; }
+
+/* === Item subtype selector === */
+#item-subtype-selector {
+  margin-top: 8px; display: none;
+}
+#item-subtype-selector .item-opt {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; margin: 2px 0; border-radius: 3px;
+  cursor: pointer; color: #aaa; font-size: 10px;
+  border: 1px solid transparent; transition: all 0.15s;
+}
+#item-subtype-selector .item-opt:hover { background: #1a1a2e; border-color: #444; }
+#item-subtype-selector .item-opt.active { background: #2a2a50; border-color: #e0b040; color: #e0b040; }
 </style>
 </head>
 <body>
@@ -173,6 +209,17 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
   <div class="tool-btn" data-tool="enemy">
     <div class="tool-swatch" style="background:#2a1a2a;display:flex;align-items:center;justify-content:center;font-size:12px;">👾</div>
     적 (순찰)
+  </div>
+  <div class="tool-btn" data-tool="item">
+    <div class="tool-swatch" style="background:#1a2a1a;display:flex;align-items:center;justify-content:center;font-size:12px;">🍙</div>
+    아이템
+  </div>
+  <div id="item-subtype-selector">
+    <div class="item-opt active" data-item="onigiri">🍙 삼각김밥</div>
+    <div class="item-opt" data-item="drink">🥤 자판기 음료</div>
+    <div class="item-opt" data-item="ramen">🍜 컵라면</div>
+    <div class="item-opt" data-item="iron">🔩 철근</div>
+    <div class="item-opt" data-item="tape">📦 테이프</div>
   </div>
   <div class="tool-btn" data-tool="erase">
     <div class="tool-swatch" style="background:#2a1a1a;display:flex;align-items:center;justify-content:center;font-size:12px;">✕</div>
@@ -245,6 +292,13 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
   <div class="param-row"><label>넉백</label><input type="range" id="p_atkKnockback" min="50" max="500" step="10"><span class="val"></span></div>
   <div class="param-row"><label>포고 힘</label><input type="range" id="p_pogoForce" min="200" max="800" step="10"><span class="val"></span></div>
   <div class="param-row"><label>히트스톱(ms)</label><input type="range" id="p_hitstopDur" min="0" max="200" step="5"><span class="val"></span></div>
+  <h2>🍚 생존</h2>
+  <div class="param-row"><label>허기(대기)</label><input type="range" id="p_hungerIdleDrain" min="0.05" max="2" step="0.05"><span class="val"></span></div>
+  <div class="param-row"><label>허기(이동)</label><input type="range" id="p_hungerWalkDrain" min="0.1" max="3" step="0.1"><span class="val"></span></div>
+  <div class="param-row"><label>허기(달리기)</label><input type="range" id="p_hungerRunDrain" min="0.2" max="5" step="0.1"><span class="val"></span></div>
+  <div class="param-row"><label>허기(전투)</label><input type="range" id="p_hungerCombatDrain" min="0.5" max="8" step="0.5"><span class="val"></span></div>
+  <div class="param-row"><label>기아HP감소</label><input type="range" id="p_starvingHpDrain" min="0.1" max="3" step="0.1"><span class="val"></span></div>
+  <div class="param-row"><label>HP회복(포만)</label><input type="range" id="p_hpRegenRate" min="0.1" max="2" step="0.1"><span class="val"></span></div>
   <h2>📷 카메라</h2>
   <div class="param-row"><label>추적 X</label><input type="range" id="p_camSpdX" min="1" max="15" step="0.5"><span class="val"></span></div>
   <div class="param-row"><label>추적 Y</label><input type="range" id="p_camSpdY" min="1" max="15" step="0.5"><span class="val"></span></div>
@@ -290,6 +344,10 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
       <kbd>↑+X</kbd> 위베기<br>
       <kbd>V</kbd> 피니셔 (기절한 적 옆에서)<br>
       <kbd>↑↓</kbd> 길게: 카메라<br>
+      <kbd>I</kbd> 인벤토리<br>
+      <kbd>E</kbd> 아이템 줍기<br>
+      <kbd>1~4</kbd> 아이템 사용<br>
+      <kbd>Q</kbd> 아이템 버리기<br>
     </div>
     <div style="margin-top:8px;">
       <b>에디트 모드</b><br>
@@ -329,6 +387,25 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
     <button id="level-browser-close" style="padding:6px 20px; background:#2a2a50; color:#e0b040;
       border:1px solid #e0b040; border-radius:4px; cursor:pointer;">닫기</button>
   </div>
+</div>
+
+<!-- Inventory Overlay -->
+<div id="inventory-overlay">
+  <h3>📦 인벤토리 <span style="font-size:10px;color:#666;">(I: 닫기)</span></h3>
+  <div class="inv-grid" id="inv-grid"></div>
+  <div class="inv-actions">
+    <span id="inv-hint">숫자키 1~4: 사용 | Q: 버리기</span>
+  </div>
+</div>
+
+<!-- Death overlay -->
+<div id="death-overlay" style="display:none; position:fixed; left:0; top:0; right:0; bottom:0;
+  background:rgba(0,0,0,0); z-index:300; pointer-events:none;
+  display:flex; align-items:center; justify-content:center; flex-direction:column;">
+  <div id="death-text" style="color:#f44; font-size:24px; font-family:'Segoe UI',sans-serif;
+    opacity:0; transition:opacity 0.5s; letter-spacing:2px;"></div>
+  <div id="death-day" style="color:#e0b040; font-size:16px; font-family:'Segoe UI',sans-serif;
+    opacity:0; transition:opacity 0.5s; margin-top:8px;"></div>
 </div>
 
 <!-- Hidden file input -->
@@ -385,6 +462,13 @@ function createDefaultLevel() {
     { id: nextId++, type: 'platform', x: -384, y: 352, w: 32, h: 32 },
     { id: nextId++, type: 'enemy', x: 400, y: 490, w: 24, h: 28 },
     { id: nextId++, type: 'enemy', x: 1400, y: 250, w: 24, h: 28 },
+    // 아이템 배치
+    { id: nextId++, type: 'item', x: 200, y: 500, w: 16, h: 16, itemType: 'onigiri' },
+    { id: nextId++, type: 'item', x: 650, y: 400, w: 16, h: 16, itemType: 'drink' },
+    { id: nextId++, type: 'item', x: 1150, y: 480, w: 16, h: 16, itemType: 'onigiri' },
+    { id: nextId++, type: 'item', x: 1600, y: 380, w: 16, h: 16, itemType: 'ramen' },
+    { id: nextId++, type: 'item', x: 950, y: 320, w: 16, h: 16, itemType: 'iron' },
+    { id: nextId++, type: 'item', x: 1800, y: 300, w: 16, h: 16, itemType: 'tape' },
   ];
   spawnPoint = { x: 100, y: 450 };
 }
@@ -439,6 +523,9 @@ const P = {
   karmaAutoThreshold: 70, karmaHighlightThreshold: 30,
   wallSlideSpd: 72, wallJumpX: 200, wallJumpY: 540, wallJumpLock: 170,
   camSpdX: 4.5, camSpdY: 3.5, camDeadX: 30, camDeadY: 15, camOffY: 40,
+  // Survival (생존)
+  hungerIdleDrain: 0.3, hungerWalkDrain: 0.6, hungerRunDrain: 1.2,
+  hungerCombatDrain: 2.0, starvingHpDrain: 0.5, hpRegenRate: 0.3,
   // Combat
   atkDur: 150, atkCd: 300, atkRange: 36, atkWidth: 28, atkDmg: 1,
   atkKnockback: 200, pogoForce: 400, hitstopDur: 60,
@@ -491,11 +578,22 @@ window.addEventListener('keydown', e => {
   // Number keys for tools
   if (editorMode) {
     const toolMap = { 'Digit1': 'select', 'Digit2': 'platform', 'Digit3': 'wall',
-      'Digit4': 'ground', 'Digit5': 'oneway', 'Digit6': 'hazard', 'Digit7': 'spawn', 'Digit8': 'enemy' };
+      'Digit4': 'ground', 'Digit5': 'oneway', 'Digit6': 'hazard', 'Digit7': 'spawn', 'Digit8': 'enemy', 'Digit9': 'item' };
     if (toolMap[e.code]) selectTool(toolMap[e.code]);
   }
 
-  if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX','KeyV'].includes(e.code)) e.preventDefault();
+  // 인벤토리 토글 (I키 — 플레이 모드)
+  if (e.code === 'KeyI' && !editorMode) {
+    inventoryOpen = !inventoryOpen;
+    updateInventoryUI();
+  }
+  // 인벤토리 아이템 사용 (1~4) — 인벤토리 열린 상태
+  if (inventoryOpen && !editorMode) {
+    const slotMap = { 'Digit1': 0, 'Digit2': 1, 'Digit3': 2, 'Digit4': 3 };
+    if (slotMap[e.code] !== undefined) { useInventoryItem(slotMap[e.code]); }
+    if (e.code === 'KeyQ') { dropInventoryItem(selectedSlot >= 0 ? selectedSlot : 0); }
+  }
+  if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX','KeyV','KeyI'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => {
   if (e.target.tagName === 'INPUT') return;
@@ -573,6 +671,8 @@ const player = {
   invincible: false,
   parrying: false, parryTimer: 0, parryCdTimer: 0, parrySuccess: false,
   hp: 5, maxHp: 5, hurtInvincTimer: 0, hurtKnockTimer: 0,
+  hunger: 100, maxHunger: 100, hungerState: 'full',
+  starvingDmgAccum: 0, // 기아 데미지 축적
   state: '대기', prevVy: 0,
   walkCycle: 0, squash: 1, stretch: 1,
   eyeBlink: 0, blinkTimer: 2,
@@ -582,10 +682,39 @@ const player = {
   lastAtkTime: 0, // 마지막 공격 시작 시간 (패링 유예용)
 };
 
+// === Item Definitions (아이템 정의) ===
+const ITEMS = {
+  onigiri: { name: '삼각김밥', emoji: '🍙', hungerRestore: 40, color: '#8f8', desc: '편의점 삼각김밥' },
+  drink: { name: '자판기 음료', emoji: '🥤', hungerRestore: 15, color: '#88f', desc: '자판기에서 나온 음료' },
+  ramen: { name: '컵라면', emoji: '🍜', hungerRestore: 60, color: '#f88', desc: '뜨거운 컵라면' },
+  iron: { name: '철근', emoji: '🔩', hungerRestore: 0, color: '#aaa', desc: '공사장 철근 (소재)' },
+  tape: { name: '테이프', emoji: '📦', hungerRestore: 0, color: '#cc8', desc: '접착 테이프 (소재)' },
+};
+
+// === Inventory (인벤토리) ===
+const inventory = [null, null, null, null]; // 4슬롯
+let inventoryOpen = false;
+let selectedSlot = -1;
+
+// === Day System ===
+let currentDay = 1;
+let deathFade = 0; // 0~1 페이드 애니메이션
+let respawning = false;
+let respawnTimer = 0;
+
+// === Field Items ===
+let fieldItems = []; // 플레이 모드 런타임 아이템 목록
+let todayPickedItemIds = []; // 오늘 주운 아이템 ID (Day 리셋용)
+
+// === Item editor state ===
+let currentItemType = 'onigiri';
+
 function resetPlayer() {
   player.x = spawnPoint.x; player.y = spawnPoint.y;
   player.vx = 0; player.vy = 0;
   player.hp = player.maxHp;
+  player.hunger = player.maxHunger; player.hungerState = 'full';
+  player.starvingDmgAccum = 0;
   player.rolling = false; player.rollTimer = 0; player.rollCdTimer = 0;
   player.wallSliding = false; player.wallJumpLockTimer = 0;
   player.hurtInvincTimer = 0; player.hurtKnockTimer = 0;
@@ -594,12 +723,36 @@ function resetPlayer() {
   rebuildColliders();
 }
 
+function dayReset() {
+  // Day 리셋: 사망 시 호출
+  currentDay++;
+  // 인벤토리 오늘 주운 아이템 유지하지 않음 (전날 밤 제작 장비만 유지 → Step 4에서 구분)
+  // 프로토: 인벤토리 초기화
+  for (let i = 0; i < inventory.length; i++) inventory[i] = null;
+  // 필드 아이템 복구 (오늘 주운 것 리스폰)
+  todayPickedItemIds = [];
+  resetPlayer();
+  rebuildFieldItems();
+}
+
+function rebuildFieldItems() {
+  // levelObjects에서 item 타입만 추출 → 런타임 필드 아이템 생성
+  const itemObjs = levelObjects.filter(o => o.type === 'item');
+  fieldItems = itemObjs.filter(o => !todayPickedItemIds.includes(o.id)).map(o => ({
+    srcId: o.id,
+    x: o.x, y: o.y, w: o.w || 16, h: o.h || 16,
+    itemType: o.itemType || 'onigiri',
+    picked: false,
+    bobOffset: Math.random() * Math.PI * 2, // 둥실둥실 애니메이션용
+  }));
+}
+
 // === Collider cache ===
 let platforms = [];
 let hazardsList = [];
 let enemies = [];
 function rebuildColliders() {
-  platforms = levelObjects.filter(o => o.type !== 'hazard' && o.type !== 'enemy');
+  platforms = levelObjects.filter(o => o.type !== 'hazard' && o.type !== 'enemy' && o.type !== 'item');
   hazardsList = levelObjects.filter(o => o.type === 'hazard');
   // Spawn enemies from level data
   const enemyObjs = levelObjects.filter(o => o.type === 'enemy');
@@ -624,6 +777,7 @@ function rebuildColliders() {
     autoKarmaTimer: 0,
   }));
   document.getElementById('obj-count').textContent = `오브젝트: ${levelObjects.length}`;
+  rebuildFieldItems();
 }
 rebuildColliders();
 
@@ -670,6 +824,13 @@ function toggleMode() {
     // Reset player to spawn
     resetPlayer();
     rebuildColliders();
+    // 생존 시스템 리셋
+    player.hunger = player.maxHunger; player.hungerState = 'full';
+    currentDay = 1; respawning = false; deathFade = 0;
+    for (let i = 0; i < inventory.length; i++) inventory[i] = null;
+    todayPickedItemIds = [];
+    inventoryOpen = false;
+    updateInventoryUI();
   }
 }
 
@@ -694,6 +855,9 @@ function selectTool(tool) {
     b.classList.toggle('selected', b.dataset.tool === tool);
   });
   if (tool !== 'select') selectedObj = null;
+  // 아이템 서브타입 셀렉터 표시/숨기기
+  const itemSel = document.getElementById('item-subtype-selector');
+  if (itemSel) itemSel.style.display = tool === 'item' ? 'block' : 'none';
 }
 
 // === Editor mouse handlers ===
@@ -786,15 +950,18 @@ function handleMouseUp(e) {
     let h = y2 - y1;
 
     // Min size
-    const minSizes = { platform: [32, 16], wall: [16, 32], ground: [64, 32], hazard: [16, 8], oneway: [32, 8], enemy: [24, 24] };
+    const minSizes = { platform: [32, 16], wall: [16, 32], ground: [64, 32], hazard: [16, 8], oneway: [32, 8], enemy: [24, 24], item: [16, 16] };
     const mins = minSizes[dragState.tool] || [16, 16];
     if (w < mins[0]) w = mins[0];
     if (h < mins[1]) h = mins[1];
 
-    levelObjects.push({
-      id: nextId++, type: dragState.tool,
-      x: x1, y: y1, w, h
-    });
+    const newObj = { id: nextId++, type: dragState.tool, x: x1, y: y1, w, h };
+    // 아이템 타입이면 itemType 추가
+    if (dragState.tool === 'item') {
+      newObj.itemType = currentItemType;
+      newObj.w = 16; newObj.h = 16; // 아이템은 고정 크기
+    }
+    levelObjects.push(newObj);
     rebuildColliders();
   }
   dragState = null;
@@ -1028,6 +1195,124 @@ function updateTrajectoryBtn() {
   document.getElementById('btn-trajectory').classList.toggle('selected', showTrajectory);
 }
 
+// === Item subtype selector ===
+document.querySelectorAll('.item-opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    currentItemType = opt.dataset.item;
+    document.querySelectorAll('.item-opt').forEach(o => o.classList.toggle('active', o === opt));
+  });
+});
+
+// === Inventory Functions ===
+function updateInventoryUI() {
+  const overlay = document.getElementById('inventory-overlay');
+  overlay.style.display = inventoryOpen ? 'block' : 'none';
+  if (!inventoryOpen) return;
+  const grid = document.getElementById('inv-grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < inventory.length; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'inv-slot' + (i === selectedSlot ? ' selected' : '');
+    const item = inventory[i];
+    slot.innerHTML = `<span class="slot-num">${i+1}</span>` +
+      (item ? `<span class="slot-emoji">${ITEMS[item].emoji}</span><span class="slot-name">${ITEMS[item].name}</span>` :
+       `<span style="color:#333;font-size:20px;">·</span>`);
+    slot.addEventListener('click', () => { selectedSlot = i; updateInventoryUI(); });
+    grid.appendChild(slot);
+  }
+  // 힌트 업데이트
+  const hint = document.getElementById('inv-hint');
+  if (selectedSlot >= 0 && inventory[selectedSlot]) {
+    const it = ITEMS[inventory[selectedSlot]];
+    hint.textContent = it.hungerRestore > 0 ?
+      `${it.name} — 허기 +${it.hungerRestore}% | 숫자키: 사용 | Q: 버리기` :
+      `${it.name} — 소재 | Q: 버리기`;
+  } else {
+    hint.textContent = '숫자키 1~4: 사용 | Q: 버리기';
+  }
+}
+
+function useInventoryItem(slotIdx) {
+  if (slotIdx < 0 || slotIdx >= inventory.length) return;
+  const itemKey = inventory[slotIdx];
+  if (!itemKey) return;
+  const item = ITEMS[itemKey];
+  if (item.hungerRestore > 0) {
+    // 식량 아이템 → 허기 회복
+    player.hunger = Math.min(player.maxHunger, player.hunger + item.hungerRestore);
+    updateHungerState();
+    inventory[slotIdx] = null;
+    floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+      text: `${item.emoji} +${item.hungerRestore}%`, color: item.color, life: 1.2 });
+    updateInventoryUI();
+  }
+}
+
+function dropInventoryItem(slotIdx) {
+  if (slotIdx < 0 || slotIdx >= inventory.length) return;
+  if (!inventory[slotIdx]) return;
+  const item = ITEMS[inventory[slotIdx]];
+  // 플레이어 위치에 아이템 드랍 (필드 아이템으로 생성)
+  fieldItems.push({
+    srcId: -1, // 드랍된 아이템
+    x: player.x, y: player.y, w: 16, h: 16,
+    itemType: inventory[slotIdx],
+    picked: false, bobOffset: Math.random() * Math.PI * 2,
+  });
+  floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+    text: `${item.emoji} 버림`, color: '#888', life: 0.8 });
+  inventory[slotIdx] = null;
+  updateInventoryUI();
+}
+
+function pickupNearbyItem() {
+  // 가장 가까운 필드 아이템 찾기
+  let closest = null, closestDist = Infinity;
+  const px = player.x + player.w/2, py = player.y + player.h/2;
+  for (const fi of fieldItems) {
+    if (fi.picked) continue;
+    const dx = (fi.x + fi.w/2) - px, dy = (fi.y + fi.h/2) - py;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 40 && dist < closestDist) { closest = fi; closestDist = dist; }
+  }
+  if (!closest) return;
+
+  // 빈 슬롯 찾기
+  const emptySlot = inventory.indexOf(null);
+  if (emptySlot >= 0) {
+    inventory[emptySlot] = closest.itemType;
+    closest.picked = true;
+    if (closest.srcId > 0) todayPickedItemIds.push(closest.srcId);
+    const item = ITEMS[closest.itemType];
+    floatingTexts.push({ x: closest.x + closest.w/2, y: closest.y - 10,
+      text: `${item.emoji} 획득!`, color: item.color, life: 1.0 });
+    emit(closest.x + closest.w/2, closest.y + closest.h/2, 8, item.color, [-30,30], [-30,10], 0.3, [1,3]);
+    if (inventoryOpen) updateInventoryUI();
+  } else {
+    // 인벤토리 풀 — 알림
+    floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+      text: '📦 인벤토리 가득!', color: '#f88', life: 1.2 });
+  }
+}
+
+function updateHungerState() {
+  if (player.hunger >= 75) player.hungerState = 'full';
+  else if (player.hunger >= 50) player.hungerState = 'normal';
+  else if (player.hunger >= 25) player.hungerState = 'hungry';
+  else player.hungerState = 'starving';
+}
+
+function getNearbyItem() {
+  // 근처 아이템 있는지 체크 (UI 표시용)
+  const px = player.x + player.w/2, py = player.y + player.h/2;
+  for (const fi of fieldItems) {
+    if (fi.picked) continue;
+    const dx = (fi.x + fi.w/2) - px, dy = (fi.y + fi.h/2) - py;
+    if (Math.sqrt(dx*dx + dy*dy) < 40) return fi;
+  }
+  return null;
+}
+
 // ===================================================================
 // PHYSICS (same as v2, condensed)
 // ===================================================================
@@ -1162,6 +1447,45 @@ function updatePlayer(dt) {
     player.squash = 0.6; player.stretch = 1.4; return;
   }
 
+  // === 아이템 줍기 (E키) ===
+  if (justPressed['KeyE'] && !inventoryOpen) pickupNearbyItem();
+
+  // === 허기 시스템 ===
+  {
+    let drainRate = P.hungerIdleDrain;
+    if (player.attacking || player.rolling) drainRate = P.hungerCombatDrain;
+    else if (Math.abs(player.vx) > P.moveSpd * 0.8) drainRate = P.hungerRunDrain;
+    else if (Math.abs(player.vx) > 10) drainRate = P.hungerWalkDrain;
+    player.hunger = Math.max(0, player.hunger - drainRate * dt);
+    updateHungerState();
+
+    // 포만 → HP 자연 회복
+    if (player.hungerState === 'full' && player.hp < player.maxHp) {
+      player.starvingDmgAccum += P.hpRegenRate * dt;
+      if (player.starvingDmgAccum >= 1) {
+        player.hp = Math.min(player.maxHp, player.hp + 1);
+        player.starvingDmgAccum -= 1;
+        floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+          text: '+1 HP', color: '#8f8', life: 0.8 });
+      }
+    }
+    // 기아 → HP 감소
+    if (player.hungerState === 'starving') {
+      player.starvingDmgAccum += P.starvingHpDrain * dt;
+      if (player.starvingDmgAccum >= 1) {
+        player.hp = Math.max(0, player.hp - 1);
+        player.starvingDmgAccum -= 1;
+        cam.shake = 2;
+        emit(player.x + player.w/2, player.y + player.h/2, 5, '#f44', [-20,20], [-20,10], 0.2);
+        floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+          text: '🍚 배고파...', color: '#f88', life: 1.0 });
+        if (player.hp <= 0) { triggerDeath(); return; }
+      }
+    } else if (player.hungerState !== 'full') {
+      player.starvingDmgAccum = 0;
+    }
+  }
+
   // Finisher/Embrace is now handled in enemy FSM stunned state (V/F keys)
 
   // Helper functions for finisher and embrace
@@ -1205,9 +1529,10 @@ function updatePlayer(dt) {
     const wx = player.touchingWallDir === 1 ? player.x + player.w : player.x;
     emit(wx, player.y + player.h/2, 5, '#ddd', [player.touchingWallDir*-15, player.touchingWallDir*-50], [-30,10], 0.2);
   }
-  // Normal jump
+  // Normal jump (기아 시 점프력 감소)
   else if (player.jumpBufferTimer > 0 && player.groundTimer > 0 && !player.hasJumped) {
-    player.vy = -P.jumpSpd; player.jumpBufferTimer = 0; player.groundTimer = 0;
+    const jumpMul = player.hungerState === 'starving' ? 0.7 : 1.0;
+    player.vy = -P.jumpSpd * jumpMul; player.jumpBufferTimer = 0; player.groundTimer = 0;
     player.hasJumped = true; player.squash = 0.75; player.stretch = 1.25;
     emit(player.x + player.w/2, player.y + player.h, 3, '#aaa', [-20,20], [-12,-2], 0.2);
   }
@@ -1217,10 +1542,13 @@ function updatePlayer(dt) {
     player.vy *= P.jumpCut; player.hasJumped = false;
   }
 
-  // Horizontal
+  // Horizontal (공복/기아 → 이동속도 제한)
   if (player.wallJumpLockTimer <= 0) {
     if (inputDir !== 0) {
-      player.vx = inputDir * P.moveSpd * (player.onGround ? 1 : P.airControl);
+      let spdMul = player.onGround ? 1 : P.airControl;
+      if (player.hungerState === 'hungry') spdMul *= 0.6; // 공복: 달리기 불가 (속도↓)
+      if (player.hungerState === 'starving') spdMul *= 0.45; // 기아: 더 느림
+      player.vx = inputDir * P.moveSpd * spdMul;
       player.facingRight = inputDir > 0;
     } else { player.vx = 0; }
   }
@@ -1255,12 +1583,12 @@ function updatePlayer(dt) {
         player.vx = dir * 150; player.vy = -180;
         cam.shake = 3; player.squash = 1.3; player.stretch = 0.7;
         emit(player.x + player.w/2, player.y + player.h/2, 10, '#f55', [-60,60], [-60,20], 0.3);
-        if (player.hp <= 0) resetPlayer();
+        if (player.hp <= 0) { triggerDeath(); return; }
         break;
       }
     }
   }
-  if (player.y > 900) resetPlayer();
+  if (player.y > 900) { triggerDeath(); return; }
 
   // === Combat ===
   player.atkCdTimer = Math.max(0, player.atkCdTimer - dt * 1000);
@@ -1493,7 +1821,7 @@ function updatePlayer(dt) {
           cam.shake = 3;
           player.squash = 1.3; player.stretch = 0.7;
           emit(player.x + player.w/2, player.y + player.h/2, 10, '#f55', [-60,60], [-60,20], 0.3);
-          if (player.hp <= 0) resetPlayer();
+          if (player.hp <= 0) { triggerDeath(); return; }
           e.aiState = 'recovery';
           e.aiTimer = P.enemyRecovery;
         }
@@ -1545,7 +1873,7 @@ function updatePlayer(dt) {
         cam.shake = 3;
         player.squash = 1.3; player.stretch = 0.7;
         emit(player.x + player.w/2, player.y + player.h/2, 10, '#f55', [-60,60], [-60,20], 0.3);
-        if (player.hp <= 0) resetPlayer();
+        if (player.hp <= 0) { triggerDeath(); return; }
       }
     }
 
@@ -1568,6 +1896,73 @@ function updatePlayer(dt) {
   for (let i = ghosts.length - 1; i >= 0; i--) {
     ghosts[i].alpha -= dt * 3; if (ghosts[i].alpha <= 0) ghosts.splice(i, 1);
   }
+}
+
+// === Death System (사망 & Day 리셋) ===
+function triggerDeath() {
+  if (respawning) return;
+  respawning = true;
+  deathFade = 0;
+  respawnTimer = 0;
+  inventoryOpen = false;
+  updateInventoryUI();
+  cam.shake = 5;
+  emit(player.x + player.w/2, player.y + player.h/2, 20, '#f44', [-80,80], [-80,30], 0.5, [2,5]);
+}
+
+function updateDeath(dt) {
+  if (!respawning) return false;
+  respawnTimer += dt;
+  // Phase 1: 페이드 인 (0~1초)
+  if (respawnTimer < 1.0) {
+    deathFade = respawnTimer / 1.0;
+  }
+  // Phase 2: Day 표시 (1~2.5초)
+  else if (respawnTimer < 2.5) {
+    deathFade = 1;
+  }
+  // Phase 3: 페이드 아웃 + 리스폰 (2.5~3.5초)
+  else if (respawnTimer < 3.5) {
+    if (respawnTimer >= 2.6 && player.hp <= 0) {
+      dayReset(); // 실제 리셋
+    }
+    deathFade = 1 - (respawnTimer - 2.5) / 1.0;
+  }
+  // Phase 4: 완료
+  else {
+    deathFade = 0;
+    respawning = false;
+  }
+  return true; // 업데이트 중 → 플레이어 업데이트 스킵
+}
+
+function drawDeathOverlay() {
+  if (deathFade <= 0) return;
+  const W = canvas.width, H = canvas.height;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // 스크린 좌표
+  ctx.fillStyle = `rgba(0,0,0,${deathFade * 0.85})`;
+  ctx.fillRect(0, 0, W, H);
+
+  if (deathFade > 0.5) {
+    const textAlpha = Math.min(1, (deathFade - 0.5) * 2);
+    ctx.globalAlpha = textAlpha;
+
+    // 사망 텍스트
+    ctx.fillStyle = '#f44';
+    ctx.font = 'bold 28px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('사 망', W/2, H/2 - 20);
+
+    // Day 표시
+    ctx.fillStyle = '#e0b040';
+    ctx.font = '18px "Segoe UI", sans-serif';
+    ctx.fillText(`Day ${currentDay} → Day ${currentDay + 1}`, W/2, H/2 + 20);
+
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
 }
 
 // === Camera ===
@@ -1661,6 +2056,7 @@ function draw() {
     hazard: ['#3a1a1a', '#5a2a2a'],
     oneway: ['#1a2a1a', '#3a5a3a'],
     enemy: ['#2a1020', '#4a2040'],
+    item: ['#1a2a1a', '#3a5a3a'],
   };
   for (const o of levelObjects) {
     const colors = typeColors[o.type] || ['#222', '#444'];
@@ -1727,6 +2123,49 @@ function draw() {
     ctx.fillStyle = '#e0b040';
     ctx.font = `${10/zoom}px monospace`;
     ctx.fillText(`${w}×${h}`, x1, y1 - 4/zoom);
+  }
+
+  // === Field Items (필드 아이템) ===
+  if (!editorMode) {
+    for (const fi of fieldItems) {
+      if (fi.picked) continue;
+      const item = ITEMS[fi.itemType];
+      if (!item) continue;
+      const bob = Math.sin(gameTime * 2 + fi.bobOffset) * 3;
+      // 글로우 효과
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = item.color;
+      ctx.beginPath();
+      ctx.arc(fi.x + fi.w/2, fi.y + fi.h/2 + bob, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // 이모지
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(item.emoji, fi.x + fi.w/2, fi.y + fi.h/2 + bob + 5);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // === Editor item preview ===
+  if (editorMode) {
+    for (const o of levelObjects.filter(ob => ob.type === 'item')) {
+      const item = ITEMS[o.itemType || 'onigiri'];
+      ctx.fillStyle = 'rgba(80,160,80,0.3)';
+      ctx.fillRect(o.x, o.y, o.w || 16, o.h || 16);
+      ctx.font = `${14/zoom}px sans-serif`;
+      ctx.fillText(item ? item.emoji : '?', o.x + 1, o.y + (o.h || 16) - 2);
+      // 아이템 이름 라벨
+      ctx.fillStyle = '#8f8'; ctx.font = `${8/zoom}px monospace`;
+      ctx.fillText(item ? item.name : '?', o.x, o.y - 4/zoom);
+
+      if (selectedObj && selectedObj.id === o.id) {
+        ctx.strokeStyle = '#e0b040'; ctx.lineWidth = 2/zoom;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(o.x - 2, o.y - 2, (o.w||16) + 4, (o.h||16) + 4);
+        ctx.setLineDash([]);
+      }
+    }
   }
 
   // === Enemies ===
@@ -1977,6 +2416,9 @@ function draw() {
   // === HUD (screen space) ===
   if (!editorMode) drawHUD();
 
+  // === Death overlay (사망 화면) ===
+  if (!editorMode) drawDeathOverlay();
+
   // === Status bar ===
   document.getElementById('sb-pos').textContent = `마우스: ${Math.round(mouse.worldX)}, ${Math.round(mouse.worldY)}`;
   document.getElementById('sb-grid').textContent = `그리드: ${gridSize || 'OFF'}`;
@@ -2109,9 +2551,13 @@ function drawPlayerChar() {
 }
 
 function drawHUD() {
+  // === Day 카운터 ===
+  ctx.fillStyle = '#e0b040'; ctx.font = 'bold 13px "Segoe UI", sans-serif';
+  ctx.fillText(`Day ${currentDay}`, 12, 46);
+
   const ms = 14;
   for (let i = 0; i < player.maxHp; i++) {
-    const mx = 12 + i * (ms + 4), my = 50;
+    const mx = 12 + i * (ms + 4), my = 54;
     if (i < player.hp) {
       ctx.fillStyle = '#eee';
       ctx.beginPath(); ctx.arc(mx+ms/2, my+ms/2, ms/2, 0, Math.PI*2); ctx.fill();
@@ -2123,14 +2569,55 @@ function drawHUD() {
       ctx.beginPath(); ctx.arc(mx+ms/2, my+ms/2, ms/2, 0, Math.PI*2); ctx.stroke();
     }
   }
+
+  // === 허기 바 ===
+  const hbX = 12, hbY = 76, hbW = 80, hbH = 6;
+  ctx.fillStyle = '#1a1a2a'; ctx.fillRect(hbX, hbY, hbW, hbH);
+  const hungerPct = player.hunger / player.maxHunger;
+  const hungerColors = { full: '#4f4', normal: '#ee0', hungry: '#f80', starving: '#f33' };
+  ctx.fillStyle = hungerColors[player.hungerState] || '#888';
+  ctx.fillRect(hbX, hbY, hbW * hungerPct, hbH);
+  // 허기 라벨
+  const hungerLabels = { full: '포만', normal: '보통', hungry: '공복', starving: '기아!' };
+  ctx.fillStyle = hungerColors[player.hungerState]; ctx.font = '9px monospace';
+  ctx.fillText(`🍚 ${hungerLabels[player.hungerState]} ${Math.floor(player.hunger)}%`, hbX, hbY + 16);
+
   if (player.rollCdTimer > 0) {
     const pct = 1 - player.rollCdTimer / P.rollCd;
-    ctx.fillStyle = '#1a1a2a'; ctx.fillRect(12, 72, 70, 4);
-    ctx.fillStyle = '#8af'; ctx.fillRect(12, 72, 70 * pct, 4);
+    ctx.fillStyle = '#1a1a2a'; ctx.fillRect(12, 96, 70, 4);
+    ctx.fillStyle = '#8af'; ctx.fillRect(12, 96, 70 * pct, 4);
   }
   // State
   ctx.fillStyle = '#e0b040'; ctx.font = '11px monospace';
-  ctx.fillText(player.state, 12, 98);
+  ctx.fillText(player.state, 12, 118);
+
+  // === 아이템 줍기 프롬프트 ===
+  const nearItem = getNearbyItem();
+  if (nearItem) {
+    const item = ITEMS[nearItem.itemType];
+    ctx.fillStyle = 'rgba(10,10,20,0.7)';
+    ctx.fillRect(canvas.width/2 - 60, canvas.height - 60, 120, 28);
+    ctx.fillStyle = '#e0b040'; ctx.font = '12px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`E: ${item.emoji} ${item.name}`, canvas.width/2, canvas.height - 42);
+    ctx.textAlign = 'left';
+  }
+
+  // === 인벤토리 미니 표시 (항상 표시) ===
+  const invX = canvas.width - 130, invY = canvas.height - 40;
+  for (let i = 0; i < 4; i++) {
+    const sx = invX + i * 28;
+    ctx.fillStyle = 'rgba(26,26,46,0.7)';
+    ctx.fillRect(sx, invY, 24, 24);
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+    ctx.strokeRect(sx, invY, 24, 24);
+    if (inventory[i]) {
+      ctx.font = '14px sans-serif';
+      ctx.fillText(ITEMS[inventory[i]].emoji, sx + 4, invY + 18);
+    }
+  }
+  ctx.fillStyle = '#555'; ctx.font = '8px monospace';
+  ctx.fillText('I: 인벤토리', invX, invY - 4);
 
   // Karma bar
   const kbW = 80, kbH = 6, kbX = 12, kbY = canvas.height - 40;
@@ -2163,7 +2650,13 @@ function gameLoop(now) {
   lastTime = now;
 
   if (!editorMode) {
-    updatePlayer(dt);
+    // 사망 페이드 처리
+    const dying = updateDeath(dt);
+    if (!dying) {
+      // 인벤토리 열려있으면 게임 시간 느리게
+      const gameDt = inventoryOpen ? dt * 0.1 : dt;
+      updatePlayer(gameDt);
+    }
   }
   updateCamera(dt);
   draw();
