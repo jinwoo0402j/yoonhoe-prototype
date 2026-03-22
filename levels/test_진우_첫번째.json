@@ -1,0 +1,243 @@
+{
+  "version": 1,
+  "params": {
+    "moveSpd": 200,
+    "airControl": 1,
+    "jumpSpd": 580,
+    "gravity": 1800,
+    "maxFall": 480,
+    "jumpCut": 0.35,
+    "coyoteTime": 70,
+    "jumpBuffer": 80,
+    "riseGravMul": 0.85,
+    "fallGravMul": 1.4,
+    "dashSpd": 500,
+    "dashDur": 210,
+    "dashCd": 600,
+    "dashIframe": 210,
+    "dashGrav": 0,
+    "wallSlideSpd": 72,
+    "wallJumpX": 200,
+    "wallJumpY": 540,
+    "wallJumpLock": 170,
+    "camSpdX": 4.5,
+    "camSpdY": 3.5,
+    "camDeadX": 30,
+    "camDeadY": 15,
+    "camOffY": 40
+  },
+  "spawn": {
+    "x": 100,
+    "y": 450
+  },
+  "objects": [
+    {
+      "id": 1,
+      "type": "ground",
+      "x": -600,
+      "y": 520,
+      "w": 3800,
+      "h": 80
+    },
+    {
+      "id": 2,
+      "type": "platform",
+      "x": 120,
+      "y": 400,
+      "w": 100,
+      "h": 16
+    },
+    {
+      "id": 3,
+      "type": "platform",
+      "x": 300,
+      "y": 320,
+      "w": 80,
+      "h": 16
+    },
+    {
+      "id": 4,
+      "type": "platform",
+      "x": 460,
+      "y": 250,
+      "w": 100,
+      "h": 16
+    },
+    {
+      "id": 5,
+      "type": "wall",
+      "x": 1100,
+      "y": 120,
+      "w": 24,
+      "h": 400
+    },
+    {
+      "id": 6,
+      "type": "wall",
+      "x": 1260,
+      "y": 120,
+      "w": 24,
+      "h": 400
+    },
+    {
+      "id": 7,
+      "type": "platform",
+      "x": 1100,
+      "y": 100,
+      "w": 184,
+      "h": 20
+    },
+    {
+      "id": 8,
+      "type": "platform",
+      "x": 650,
+      "y": 420,
+      "w": 60,
+      "h": 16
+    },
+    {
+      "id": 9,
+      "type": "platform",
+      "x": 800,
+      "y": 380,
+      "w": 60,
+      "h": 16
+    },
+    {
+      "id": 10,
+      "type": "platform",
+      "x": 950,
+      "y": 340,
+      "w": 60,
+      "h": 16
+    },
+    {
+      "id": 11,
+      "type": "hazard",
+      "x": 700,
+      "y": 505,
+      "w": 100,
+      "h": 15
+    },
+    {
+      "id": 12,
+      "type": "hazard",
+      "x": 1150,
+      "y": 505,
+      "w": 80,
+      "h": 15
+    },
+    {
+      "id": 13,
+      "type": "platform",
+      "x": 1380,
+      "y": 280,
+      "w": 200,
+      "h": 16
+    },
+    {
+      "id": 14,
+      "type": "platform",
+      "x": 1600,
+      "y": 400,
+      "w": 100,
+      "h": 16
+    },
+    {
+      "id": 15,
+      "type": "platform",
+      "x": 1780,
+      "y": 320,
+      "w": 100,
+      "h": 16
+    },
+    {
+      "id": 16,
+      "type": "platform",
+      "x": 1950,
+      "y": 440,
+      "w": 70,
+      "h": 16
+    },
+    {
+      "id": 17,
+      "type": "platform",
+      "x": 2100,
+      "y": 370,
+      "w": 70,
+      "h": 16
+    },
+    {
+      "id": 18,
+      "type": "platform",
+      "x": 2250,
+      "y": 300,
+      "w": 70,
+      "h": 16
+    },
+    {
+      "id": 19,
+      "type": "wall",
+      "x": -512,
+      "y": 304,
+      "w": 128,
+      "h": 208
+    },
+    {
+      "id": 20,
+      "type": "wall",
+      "x": -496,
+      "y": 512,
+      "w": 96,
+      "h": 32
+    },
+    {
+      "id": 21,
+      "type": "wall",
+      "x": -512,
+      "y": 496,
+      "w": 112,
+      "h": 64
+    },
+    {
+      "id": 22,
+      "type": "wall",
+      "x": -432,
+      "y": 496,
+      "w": 48,
+      "h": 48
+    },
+    {
+      "id": 23,
+      "type": "platform",
+      "x": -352,
+      "y": 400,
+      "w": 32,
+      "h": 32
+    },
+    {
+      "id": 24,
+      "type": "platform",
+      "x": -320,
+      "y": 448,
+      "w": 64,
+      "h": 32
+    },
+    {
+      "id": 25,
+      "type": "platform",
+      "x": -240,
+      "y": 464,
+      "w": 48,
+      "h": 48
+    },
+    {
+      "id": 26,
+      "type": "platform",
+      "x": -384,
+      "y": 352,
+      "w": 32,
+      "h": 32
+    }
+  ]
+}
