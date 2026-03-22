@@ -2057,17 +2057,19 @@ function updatePlayer(dt) {
     player.hunger = Math.max(0, player.hunger - drainRate * dt);
     updateHungerState();
 
-    // 포만 → HP 자연 회복
+    // 포만 → HP 자연 회복 (별도 축적 변수 사용)
     if (player.hungerState === 'full' && player.hp < player.maxHp) {
-      player.starvingDmgAccum += P.hpRegenRate * dt;
-      if (player.starvingDmgAccum >= 1) {
+      player._hpRegenAccum = (player._hpRegenAccum || 0) + P.hpRegenRate * dt;
+      if (player._hpRegenAccum >= 1) {
         player.hp = Math.min(player.maxHp, player.hp + 1);
-        player.starvingDmgAccum -= 1;
+        player._hpRegenAccum -= 1;
         floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
           text: '+1 HP', color: '#8f8', life: 0.8 });
       }
+    } else {
+      player._hpRegenAccum = 0;
     }
-    // 기아 → HP 감소
+    // 기아(0%) → HP 감소
     if (player.hungerState === 'starving') {
       player.starvingDmgAccum += P.starvingHpDrain * dt;
       if (player.starvingDmgAccum >= 1) {
@@ -2079,60 +2081,28 @@ function updatePlayer(dt) {
           text: '🍚 배고파...', color: '#f88', life: 1.0 });
         if (player.hp <= 0) { triggerDeath(); return; }
       }
-    } else if (player.hungerState !== 'full') {
-      player.starvingDmgAccum = 0;
+    } else {
+      player.starvingDmgAccum = 0; // 기아 아니면 항상 리셋
     }
   }
 
-  // === 무명 게이지 (산이티) 시스템 ===
+  // === 무명 게이지 (정신력) 시스템 ===
   {
     player.fearTimer = Math.max(0, player.fearTimer - dt);
-    let sanityChange = 0;
+    let sanityDelta = 0;
 
-    // 쉘터 안: 회복
     if (inShelter) {
-      sanityChange += P.sanityRecoverShelter;
+      // 쉘터 안: 회복
+      sanityDelta = P.sanityRecoverShelter * dt;
     } else {
-      // 밤 + 야외: 감소
+      // 밤 야외: 감소
       if (timeOfDay === 'night') {
-        sanityChange -= P.sanityDecayNight;
+        sanityDelta -= P.sanityDecayNight * dt;
       }
       // 인벤토리 아이템 집착 패널티
       const itemCount = inventory.filter(x => x !== null).length;
-      sanityChange -= itemCount * P.sanityItemPenalty * dt;
-
-      // 적 근처: 감소 (sanityDecayNearEnemy는 per-second)
-      let nearEnemy = false;
-      for (const e of enemies) {
-        if (e.dead) continue;
-        const ex = e.x + e.w/2, ey = e.y + e.h/2;
-        const px2 = player.x + player.w/2, py2 = player.y + player.h/2;
-        const edist = Math.sqrt((ex-px2)**2 + (ey-py2)**2);
-        if (edist < 150) {
-          nearEnemy = true;
-          sanityChange -= P.sanityDecayNearEnemy;
-          // 버서커 근처: 공포 타이머
-          if (e.subtype === 'berserker' && timeOfDay === 'night' && edist < 200) {
-            player.fearTimer = Math.max(player.fearTimer, 2.0);
-          }
-          break;
-        }
-      }
-      // itemCount penalty는 dt 이미 곱함, 나머지는 per-second이므로 dt 곱하기
-      sanityChange *= dt;
-      sanityChange -= itemCount * P.sanityItemPenalty * dt; // 중복 제거 보정
-    }
-
-    // 간단히: 쉘터에서는 flat dt*rate, 외부에서는 dt*rate
-    // (위의 sanityChange *= dt 처리를 단순화)
-    // 재계산 (위 계산이 복잡해서 재작성)
-    let sanityDelta = 0;
-    if (inShelter) {
-      sanityDelta = P.sanityRecoverShelter * dt;
-    } else {
-      if (timeOfDay === 'night') sanityDelta -= P.sanityDecayNight * dt;
-      const itemCount2 = inventory.filter(x => x !== null).length;
-      sanityDelta -= itemCount2 * P.sanityItemPenalty * dt;
+      sanityDelta -= itemCount * P.sanityItemPenalty * dt;
+      // 적 근처: 감소
       for (const e of enemies) {
         if (e.dead) continue;
         const ex = e.x + e.w/2, ey = e.y + e.h/2;
@@ -2140,6 +2110,7 @@ function updatePlayer(dt) {
         const edist = Math.sqrt((ex-px2)**2 + (ey-py2)**2);
         if (edist < 150) {
           sanityDelta -= P.sanityDecayNearEnemy * dt;
+          // 버서커 근처: 공포 타이머
           if (e.subtype === 'berserker' && timeOfDay === 'night' && edist < 200) {
             player.fearTimer = Math.max(player.fearTimer, 2.0);
           }
