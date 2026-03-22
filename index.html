@@ -626,11 +626,11 @@ window.addEventListener('keydown', e => {
     }
     if (e.code === 'ArrowUp' || e.code === 'KeyW') {
       if (shelterInCraft) shelterCraftSelection = (shelterCraftSelection - 1 + RECIPES.length) % RECIPES.length;
-      else shelterMenuSelection = (shelterMenuSelection - 1 + 5) % 5;
+      else shelterMenuSelection = (shelterMenuSelection - 1 + 4) % 4;
     }
     if (e.code === 'ArrowDown' || e.code === 'KeyS') {
       if (shelterInCraft) shelterCraftSelection = (shelterCraftSelection + 1) % RECIPES.length;
-      else shelterMenuSelection = (shelterMenuSelection + 1) % 5;
+      else shelterMenuSelection = (shelterMenuSelection + 1) % 4;
     }
     if (e.code === 'Enter' || e.code === 'Space') {
       if (shelterInCraft) {
@@ -638,9 +638,8 @@ window.addEventListener('keydown', e => {
       } else {
         if (shelterMenuSelection === 0) { /* 인벤토리: 그냥 표시 중 */ }
         else if (shelterMenuSelection === 1) shelterEat();
-        else if (shelterMenuSelection === 2) shelterRest();
-        else if (shelterMenuSelection === 3) { shelterInCraft = true; shelterCraftSelection = 0; }
-        else if (shelterMenuSelection === 4) shelterSleep();
+        else if (shelterMenuSelection === 2) { shelterInCraft = true; shelterCraftSelection = 0; }
+        else if (shelterMenuSelection === 3) shelterSleep();
       }
     }
   }
@@ -1557,16 +1556,34 @@ function exitShelter() {
 }
 
 function shelterEat() {
-  player.hunger = player.maxHunger;
+  // 인벤토리에서 식량 아이템 찾아서 소모 → 허기 회복
+  let foodIdx = -1;
+  let bestRestore = 0;
+  // 가장 효율 좋은 식량 자동 선택
+  for (let i = 0; i < inventory.length; i++) {
+    if (!inventory[i]) continue;
+    const item = ITEMS[inventory[i]];
+    if (item && item.hungerRestore > 0 && item.hungerRestore > bestRestore) {
+      bestRestore = item.hungerRestore;
+      foodIdx = i;
+    }
+  }
+  if (foodIdx < 0) {
+    floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+      text: '🍚 식량이 없어요!', color: '#f88', life: 1.2 });
+    return;
+  }
+  if (player.hunger >= player.maxHunger) {
+    floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
+      text: '이미 배불러요~', color: '#888', life: 1.0 });
+    return;
+  }
+  const food = ITEMS[inventory[foodIdx]];
+  inventory[foodIdx] = null;
+  player.hunger = Math.min(player.maxHunger, player.hunger + food.hungerRestore);
   updateHungerState();
   floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
-    text: '🍚 허기 완전 회복!', color: '#4f4', life: 1.5 });
-}
-
-function shelterRest() {
-  player.hp = player.maxHp;
-  floatingTexts.push({ x: player.x + player.w/2, y: player.y - 10,
-    text: '💤 HP 완전 회복!', color: '#8af', life: 1.5 });
+    text: `🍚 ${food.emoji} ${food.name} 요리! +${food.hungerRestore}%`, color: '#4f4', life: 1.5 });
 }
 
 function shelterSleep() {
@@ -1637,6 +1654,7 @@ function updateSleep(dt) {
         rebuildColliders(); // enemies & crates 리스폰
         player.x = spawnPoint.x; player.y = spawnPoint.y;
         player.vx = 0; player.vy = 0;
+        player.hp = player.maxHp; // 수면 시 HP 완전 회복
         inShelter = false;
         shelterInCraft = false;
       }
@@ -1716,12 +1734,12 @@ function drawShelterMenu() {
 
   if (!shelterInCraft) {
     // 메인 메뉴 옵션들
+    const foodCount = inventory.filter(x => x && ITEMS[x] && ITEMS[x].hungerRestore > 0).length;
     const opts = [
       '📦 인벤토리 관리',
-      '🍚 식사 (허기 완전 회복)',
-      '💤 휴식 (HP 완전 회복)',
+      `🍚 식사 (식량 ${foodCount}개 보유)`,
       '🔨 제작',
-      '🌙 수면 (다음 Day)',
+      `🌙 수면 (Day ${currentDay} → Day ${currentDay + 1})`,
     ];
     for (let i = 0; i < opts.length; i++) {
       const oy = menuY + 68 + i * 38;
