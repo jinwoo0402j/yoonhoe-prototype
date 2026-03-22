@@ -358,8 +358,8 @@ canvas { display: block; position: fixed; left: 0; top: 0; }
     <div>
       <b>플레이 모드</b><br>
       <kbd>← →</kbd> 이동<br>
-      <kbd>Space</kbd> 점프<br>
-      <kbd>Z</kbd> / <kbd>Shift</kbd> 구르기 (i-frame)<br>
+      <kbd>Z</kbd> 점프<br>
+      <kbd>C</kbd> / <kbd>Shift</kbd> 구르기/돌진 (i-frame)<br>
       <kbd>X</kbd> 공격 (맞받아치면 패링!)<br>
       <kbd>↓+X</kbd> 아래베기 (포고!)<br>
       <kbd>↑+X</kbd> 위베기<br>
@@ -663,7 +663,7 @@ window.addEventListener('keydown', e => {
       }
     }
   }
-  if (!editorMode && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX','KeyV','KeyI'].includes(e.code)) e.preventDefault();
+  if (!editorMode && ['Space','KeyZ','KeyC','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyX','KeyV','KeyI'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => {
   if (e.target.tagName === 'INPUT') return;
@@ -1974,8 +1974,8 @@ function updatePlayer(dt) {
 
   const inL = keys['ArrowLeft'] || keys['KeyA'];
   const inR = keys['ArrowRight'] || keys['KeyD'];
-  const inJump = keys['Space'];
-  const inRoll = justPressed['KeyZ'] || justPressed['ShiftLeft'] || justPressed['ShiftRight'];
+  const inJump = keys['KeyZ'] || keys['Space'];
+  const inRoll = justPressed['KeyC'] || justPressed['ShiftLeft'] || justPressed['ShiftRight'];
   const inputDir = (inR ? 1 : 0) - (inL ? 1 : 0);
 
   // Timers
@@ -1991,7 +1991,7 @@ function updatePlayer(dt) {
   if (player.onGround) { player.groundTimer = P.coyoteTime; player.hasJumped = false; }
   else { player.groundTimer = Math.max(0, player.groundTimer - dt * 1000); }
 
-  if (justPressed['Space']) player.jumpBufferTimer = P.jumpBuffer;
+  if (justPressed['KeyZ'] || justPressed['Space']) player.jumpBufferTimer = P.jumpBuffer;
   player.jumpBufferTimer = Math.max(0, player.jumpBufferTimer - dt * 1000);
 
   // Hurt knockback
